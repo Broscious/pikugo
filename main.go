@@ -2,7 +2,11 @@ package main
 
 import (
 	"syscall/js"
+	"strconv"
 )
+
+var uploadedImages []js.Value
+var selectedImageIndex = -1
 
 func main() {
 	doc := js.Global().Get("document")
@@ -21,19 +25,41 @@ func main() {
 	// Set up file input handler
 	fileInput := doc.Call("getElementById", "fileInput")
 	imageGallery := doc.Call("getElementById", "imageGallery")
+	imageViewer := doc.Call("getElementById", "imageViewer")
+	prevBtn := doc.Call("getElementById", "prevBtn")
+	nextBtn := doc.Call("getElementById", "nextBtn")
 
 	fileInput.Call("addEventListener", "change", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		event := args[0]
 		files := event.Get("target").Get("files")
 		
-		// Clear gallery
+		// Clear gallery and reset images
 		imageGallery.Set("innerHTML", "")
+		uploadedImages = nil
+		selectedImageIndex = -1
 		
 		// Process all selected files
 		fileCount := files.Get("length").Int()
 		for i := 0; i < fileCount; i++ {
 			file := files.Index(i)
-			handleFileUpload(file, imageGallery, doc)
+			handleFileUpload(file, imageGallery, imageViewer, doc)
+		}
+		return nil
+	}))
+
+	// Set up navigation buttons
+	prevBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		if selectedImageIndex > 0 {
+			selectedImageIndex--
+			updateSelectedImage(doc)
+		}
+		return nil
+	}))
+
+	nextBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		if selectedImageIndex < len(uploadedImages)-1 {
+			selectedImageIndex++
+			updateSelectedImage(doc)
 		}
 		return nil
 	}))
@@ -42,7 +68,7 @@ func main() {
 	select {}
 }
 
-func handleFileUpload(file js.Value, imageGallery js.Value, doc js.Value) {
+func handleFileUpload(file js.Value, imageGallery js.Value, imageViewer js.Value, doc js.Value) {
 	// Create a FileReader to read the file
 	fileReader := js.Global().Get("FileReader").New()
 	
@@ -50,6 +76,19 @@ func handleFileUpload(file js.Value, imageGallery js.Value, doc js.Value) {
 	fileReader.Set("onload", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		// Get the data URL from the FileReader result
 		dataURL := fileReader.Get("result").String()
+		
+		// Store the data URL
+		uploadedImages = append(uploadedImages, js.ValueOf(dataURL))
+		console := js.Global().Get("console")
+		console.Call("log", "Uploaded image length:", len(uploadedImages))
+		
+		// If this is the first image, select it
+		// TODO make this only call after all images are loaded
+		if selectedImageIndex == -1 {
+			selectedImageIndex = 0
+			imageViewer.Get("style").Set("display", "block")
+			updateSelectedImage(doc)
+		}
 		
 		// Create gallery item container
 		galleryItem := doc.Call("createElement", "div")
@@ -59,6 +98,14 @@ func handleFileUpload(file js.Value, imageGallery js.Value, doc js.Value) {
 		img := doc.Call("createElement", "img")
 		img.Set("src", dataURL)
 		img.Set("alt", file.Get("name").String())
+		
+		// Add click handler to select this image
+		imageIndex := len(uploadedImages) - 1
+		img.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+			selectedImageIndex = imageIndex
+			updateSelectedImage(doc)
+			return nil
+		}))
 		
 		// Append image to gallery item
 		galleryItem.Call("appendChild", img)
@@ -71,4 +118,38 @@ func handleFileUpload(file js.Value, imageGallery js.Value, doc js.Value) {
 	
 	// Read the file as a data URL
 	fileReader.Call("readAsDataURL", file)
+}
+
+func updateSelectedImage(doc js.Value) {
+	if selectedImageIndex < 0 || selectedImageIndex >= len(uploadedImages) {
+		return
+	}
+	console := js.Global().Get("console")
+	console.Call("log", "Updating selected image to index:", selectedImageIndex)
+	
+	// Update the main image display
+	selectedImg := doc.Call("getElementById", "selectedImage")
+	selectedImg.Set("src", uploadedImages[selectedImageIndex].String())
+	
+	// Update the counter
+	counter := doc.Call("getElementById", "imageCounter")
+	counter.Set("textContent", "Image " + strconv.Itoa(selectedImageIndex+1)+" / "+ strconv.Itoa(len(uploadedImages)))
+	
+	// Update gallery thumbnail styling
+	gallery := doc.Call("getElementById", "imageGallery")
+	galleryItems := gallery.Call("getElementsByClassName", "gallery-item")
+	for i := 0; i < galleryItems.Get("length").Int(); i++ {
+		img := galleryItems.Index(i).Call("querySelector", "img")
+		if i == selectedImageIndex {
+			img.Get("classList").Call("add", "selected")
+		} else {
+			img.Get("classList").Call("remove", "selected")
+		}
+	}
+	
+	// Update button states
+	prevBtn := doc.Call("getElementById", "prevBtn")
+	nextBtn := doc.Call("getElementById", "nextBtn")
+	prevBtn.Set("disabled", selectedImageIndex == 0)
+	nextBtn.Set("disabled", selectedImageIndex == len(uploadedImages)-1)
 }
