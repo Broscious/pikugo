@@ -99,11 +99,46 @@
             padding: 20px;
             background-color: white;
             min-height: 300px;
+            overflow: hidden;
+            cursor: crosshair;
         }
         #selectedImage {
+            display: block;
             max-width: 100%;
             max-height: 500px;
             border-radius: 4px;
+        }
+        .image-stage {
+            position: relative;
+            line-height: 0;
+            transition: transform 0.2s ease;
+            transform: scale(1);
+        }
+        .image-stage.zoomed {
+            transform: scale(2);
+        }
+        .selection-marker {
+            display: none;
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border: 1px solid #e4572e;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+        .selection-marker::after {
+            content: "";
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            top: 50%;
+            left: 50%;
+            border-radius: 50%;
+            background-color: #e4572e;
+            transform: translate(-50%, -50%);
         }
     </style>
 </head>
@@ -120,8 +155,11 @@
                     <span id="imageCounter" class="image-counter"></span>
                     <button id="nextBtn" class="nav-button">Next →</button>
                 </div>
-                <div class="viewer-container">
-                    <img id="selectedImage" alt="Selected image">
+                <div id="viewerContainer" class="viewer-container">
+                    <div id="imageStage" class="image-stage">
+                        <img id="selectedImage" alt="Selected image">
+                        <span id="selectionMarker" class="selection-marker" aria-label="Selected image position"></span>
+                    </div>
                 </div>
             </div>
             

@@ -1,14 +1,25 @@
 package main
 
 import (
-	"syscall/js"
+	"math"
 	"strconv"
+	"syscall/js"
 )
 
 var uploadedImages []js.Value
 var selectedImageIndex = -1
 
+type imageSelection struct {
+	x int
+	y int
+}
+
+var imageSelections = make(map[int]imageSelection)
+
 func main() {
+	console := js.Global().Get("console")
+	console.Call("log", "main")
+
 	doc := js.Global().Get("document")
 	greeting := doc.Call("getElementById", "greeting")
 
@@ -26,29 +37,67 @@ func main() {
 	fileInput := doc.Call("getElementById", "fileInput")
 	imageGallery := doc.Call("getElementById", "imageGallery")
 	imageViewer := doc.Call("getElementById", "imageViewer")
+	viewerContainer := doc.Call("getElementById", "viewerContainer")
+	imageStage := doc.Call("getElementById", "imageStage")
+	selectedImage := doc.Call("getElementById", "selectedImage")
+	selectionMarker := doc.Call("getElementById", "selectionMarker")
 	prevBtn := doc.Call("getElementById", "prevBtn")
 	nextBtn := doc.Call("getElementById", "nextBtn")
 
+	viewerContainer.Call("addEventListener", "mousemove", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		updateZoomOrigin(imageStage, selectedImage, args[0])
+		return nil
+	}))
+	viewerContainer.Call("addEventListener", "mouseenter", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		imageStage.Get("classList").Call("add", "zoomed")
+		return nil
+	}))
+	viewerContainer.Call("addEventListener", "mouseleave", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		imageStage.Get("classList").Call("remove", "zoomed")
+		imageStage.Get("style").Set("transformOrigin", "center center")
+		return nil
+	}))
+	selectedImage.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		if selectedImageIndex < 0 {
+			return nil
+		}
+
+		selection := imageSelectionAt(selectedImage, args[0])
+		imageSelections[selectedImageIndex] = selection
+		setMarkerPosition(selectionMarker, selectedImage, selection)
+		return nil
+	}))
+
 	fileInput.Call("addEventListener", "change", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		console := js.Global().Get("console")
+		console.Call("log", "changed file input selected image index:", selectedImageIndex)
+
 		event := args[0]
 		files := event.Get("target").Get("files")
-		
+
 		// Clear gallery and reset images
 		imageGallery.Set("innerHTML", "")
 		uploadedImages = nil
 		selectedImageIndex = -1
-		
+		imageSelections = make(map[int]imageSelection)
+
 		// Process all selected files
 		fileCount := files.Get("length").Int()
 		for i := 0; i < fileCount; i++ {
 			file := files.Index(i)
 			handleFileUpload(file, imageGallery, imageViewer, doc)
 		}
+
+		console.Call("log", "selected image index after uploading all files:", selectedImageIndex)
+
 		return nil
 	}))
 
 	// Set up navigation buttons
 	prevBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		console := js.Global().Get("console")
+		console.Call("log", "clicked prev button, current index:", selectedImageIndex)
+
 		if selectedImageIndex > 0 {
 			selectedImageIndex--
 			updateSelectedImage(doc)
@@ -57,6 +106,9 @@ func main() {
 	}))
 
 	nextBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		console := js.Global().Get("console")
+		console.Call("log", "clicked next button, current index:", selectedImageIndex)
+
 		if selectedImageIndex < len(uploadedImages)-1 {
 			selectedImageIndex++
 			updateSelectedImage(doc)
@@ -64,6 +116,7 @@ func main() {
 		return nil
 	}))
 
+	console.Call("log", "end")
 	// Keep the Go runtime alive
 	select {}
 }
@@ -71,34 +124,34 @@ func main() {
 func handleFileUpload(file js.Value, imageGallery js.Value, imageViewer js.Value, doc js.Value) {
 	// Create a FileReader to read the file
 	fileReader := js.Global().Get("FileReader").New()
-	
+
 	// Set up the onload handler
 	fileReader.Set("onload", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		// Get the data URL from the FileReader result
 		dataURL := fileReader.Get("result").String()
-		
+
 		// Store the data URL
 		uploadedImages = append(uploadedImages, js.ValueOf(dataURL))
 		console := js.Global().Get("console")
 		console.Call("log", "Uploaded image length:", len(uploadedImages))
-		
+		console.Call("log", "selectedImageIndex:", selectedImageIndex)
+
 		// If this is the first image, select it
-		// TODO make this only call after all images are loaded
 		if selectedImageIndex == -1 {
 			selectedImageIndex = 0
 			imageViewer.Get("style").Set("display", "block")
 			updateSelectedImage(doc)
 		}
-		
+
 		// Create gallery item container
 		galleryItem := doc.Call("createElement", "div")
 		galleryItem.Get("classList").Call("add", "gallery-item")
-		
+
 		// Create and set up image
 		img := doc.Call("createElement", "img")
 		img.Set("src", dataURL)
 		img.Set("alt", file.Get("name").String())
-		
+
 		// Add click handler to select this image
 		imageIndex := len(uploadedImages) - 1
 		img.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
@@ -106,35 +159,43 @@ func handleFileUpload(file js.Value, imageGallery js.Value, imageViewer js.Value
 			updateSelectedImage(doc)
 			return nil
 		}))
-		
+
 		// Append image to gallery item
 		galleryItem.Call("appendChild", img)
-		
+
 		// Append gallery item to gallery
 		imageGallery.Call("appendChild", galleryItem)
-		
+
 		return nil
 	}))
-	
+
 	// Read the file as a data URL
 	fileReader.Call("readAsDataURL", file)
 }
 
 func updateSelectedImage(doc js.Value) {
+	console := js.Global().Get("console")
+	console.Call("log", "Updating selected image to index:", selectedImageIndex)
+
 	if selectedImageIndex < 0 || selectedImageIndex >= len(uploadedImages) {
 		return
 	}
-	console := js.Global().Get("console")
-	console.Call("log", "Updating selected image to index:", selectedImageIndex)
-	
+
 	// Update the main image display
 	selectedImg := doc.Call("getElementById", "selectedImage")
 	selectedImg.Set("src", uploadedImages[selectedImageIndex].String())
-	
+	imageStage := doc.Call("getElementById", "imageStage")
+	imageStage.Get("style").Set("transformOrigin", "center center")
+	selectionMarker := doc.Call("getElementById", "selectionMarker")
+	selectionMarker.Get("style").Set("display", "none")
+	if selection, ok := imageSelections[selectedImageIndex]; ok {
+		setMarkerPosition(selectionMarker, selectedImg, selection)
+	}
+
 	// Update the counter
 	counter := doc.Call("getElementById", "imageCounter")
-	counter.Set("textContent", "Image " + strconv.Itoa(selectedImageIndex+1)+" / "+ strconv.Itoa(len(uploadedImages)))
-	
+	counter.Set("textContent", "Image "+strconv.Itoa(selectedImageIndex+1)+" / "+strconv.Itoa(len(uploadedImages)))
+
 	// Update gallery thumbnail styling
 	gallery := doc.Call("getElementById", "imageGallery")
 	galleryItems := gallery.Call("getElementsByClassName", "gallery-item")
@@ -146,10 +207,56 @@ func updateSelectedImage(doc js.Value) {
 			img.Get("classList").Call("remove", "selected")
 		}
 	}
-	
+
 	// Update button states
 	prevBtn := doc.Call("getElementById", "prevBtn")
 	nextBtn := doc.Call("getElementById", "nextBtn")
 	prevBtn.Set("disabled", selectedImageIndex == 0)
 	nextBtn.Set("disabled", selectedImageIndex == len(uploadedImages)-1)
+}
+
+func imageSelectionAt(image js.Value, event js.Value) imageSelection {
+	rect := image.Call("getBoundingClientRect")
+	x := (event.Get("clientX").Float() - rect.Get("left").Float()) / rect.Get("width").Float() * image.Get("naturalWidth").Float()
+	y := (event.Get("clientY").Float() - rect.Get("top").Float()) / rect.Get("height").Float() * image.Get("naturalHeight").Float()
+	return imageSelection{
+		x: clampPixelOffset(x, image.Get("naturalWidth").Float()),
+		y: clampPixelOffset(y, image.Get("naturalHeight").Float()),
+	}
+}
+
+func updateZoomOrigin(stage js.Value, image js.Value, event js.Value) {
+	selection := imageSelectionAt(image, event)
+	stage.Get("style").Set("transformOrigin", formatSelectionPercentage(image, selection))
+}
+
+func setMarkerPosition(marker js.Value, image js.Value, selection imageSelection) {
+	marker.Get("style").Set("left", formatPixelOffsetPercentage(selection.x, image.Get("naturalWidth").Float()))
+	marker.Get("style").Set("top", formatPixelOffsetPercentage(selection.y, image.Get("naturalHeight").Float()))
+	marker.Get("style").Set("display", "block")
+}
+
+func formatSelectionPercentage(image js.Value, selection imageSelection) string {
+	return formatPixelOffsetPercentage(selection.x, image.Get("naturalWidth").Float()) + " " + formatPixelOffsetPercentage(selection.y, image.Get("naturalHeight").Float())
+}
+
+func formatPixelOffsetPercentage(value int, imageSize float64) string {
+	if imageSize <= 0 {
+		return "50%"
+	}
+	return formatPercentage(float64(value) / imageSize * 100)
+}
+
+func clampPixelOffset(value float64, imageSize float64) int {
+	if value < 0 {
+		return 0
+	}
+	if value > imageSize {
+		return int(imageSize)
+	}
+	return int(math.Round(value))
+}
+
+func formatPercentage(value float64) string {
+	return strconv.FormatFloat(value, 'f', 2, 64) + "%"
 }
