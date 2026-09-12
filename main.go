@@ -1,12 +1,21 @@
 package main
 
 import (
+	"encoding/base64"
+	"image"
 	"math"
 	"strconv"
 	"syscall/js"
+
+	"wasm-hello/imageproc"
 )
 
-var uploadedImages []js.Value
+type uploadedImage struct {
+	dataURL string
+	input   imageproc.ImageInput
+}
+
+var uploadedImages []uploadedImage
 var selectedImageIndex = -1
 
 type imageSelection struct {
@@ -43,6 +52,8 @@ func main() {
 	selectionMarker := doc.Call("getElementById", "selectionMarker")
 	prevBtn := doc.Call("getElementById", "prevBtn")
 	nextBtn := doc.Call("getElementById", "nextBtn")
+	createWiggleBtn := doc.Call("getElementById", "createWiggleBtn")
+	wiggleResult := doc.Call("getElementById", "wiggleResult")
 
 	viewerContainer.Call("addEventListener", "mousemove", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		updateZoomOrigin(imageStage, selectedImage, args[0])
@@ -64,6 +75,7 @@ func main() {
 
 		selection := imageSelectionAt(selectedImage, args[0])
 		imageSelections[selectedImageIndex] = selection
+		uploadedImages[selectedImageIndex].input.Selection = image.Point{X: selection.x, Y: selection.y}
 		setMarkerPosition(selectionMarker, selectedImage, selection)
 		return nil
 	}))
@@ -80,12 +92,15 @@ func main() {
 		uploadedImages = nil
 		selectedImageIndex = -1
 		imageSelections = make(map[int]imageSelection)
+		createWiggleBtn.Set("disabled", true)
+		wiggleResult.Set("src", "")
+		wiggleResult.Get("style").Set("display", "none")
 
 		// Process all selected files
 		fileCount := files.Get("length").Int()
 		for i := 0; i < fileCount; i++ {
 			file := files.Index(i)
-			handleFileUpload(file, imageGallery, imageViewer, doc)
+			handleFileUpload(file, imageGallery, imageViewer, createWiggleBtn, doc)
 		}
 
 		console.Call("log", "selected image index after uploading all files:", selectedImageIndex)
@@ -116,12 +131,40 @@ func main() {
 		return nil
 	}))
 
+	createWiggleBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		if len(uploadedImages) == 0 {
+			return nil
+		}
+
+		inputs := make([]imageproc.ImageInput, len(uploadedImages))
+		for index, uploadedImage := range uploadedImages {
+			inputs[index] = uploadedImage.input
+		}
+
+		console.Call("log", "Started creating wiggle with", len(inputs), "images")
+		result, err := imageproc.ProcessWiggle(imageproc.WiggleRequest{
+			Images:  inputs,
+			Options: imageproc.DefaultWiggleOptions(),
+		})
+		if err != nil {
+			console := js.Global().Get("console")
+			console.Call("error", err.Error())
+			return nil
+		}
+		console.Call("log", "Finished creating wiggle, GIF size:", len(result.GIF), "bytes")
+
+		gifDataURL := "data:image/gif;base64," + base64.StdEncoding.EncodeToString(result.GIF)
+		wiggleResult.Set("src", gifDataURL)
+		wiggleResult.Get("style").Set("display", "block")
+		return nil
+	}))
+
 	console.Call("log", "end")
 	// Keep the Go runtime alive
 	select {}
 }
 
-func handleFileUpload(file js.Value, imageGallery js.Value, imageViewer js.Value, doc js.Value) {
+func handleFileUpload(file js.Value, imageGallery js.Value, imageViewer js.Value, createWiggleBtn js.Value, doc js.Value) {
 	// Create a FileReader to read the file
 	fileReader := js.Global().Get("FileReader").New()
 
@@ -131,7 +174,21 @@ func handleFileUpload(file js.Value, imageGallery js.Value, imageViewer js.Value
 		dataURL := fileReader.Get("result").String()
 
 		// Store the data URL
-		uploadedImages = append(uploadedImages, js.ValueOf(dataURL))
+		decodedImage, err := imageproc.DecodeDataURL(dataURL)
+		if err != nil {
+			console := js.Global().Get("console")
+			console.Call("error", err.Error())
+			return nil
+		}
+
+		uploadedImages = append(uploadedImages, uploadedImage{
+			dataURL: dataURL,
+			input: imageproc.ImageInput{
+				Image:     decodedImage,
+				Selection: image.Point{},
+			},
+		})
+		createWiggleBtn.Set("disabled", false)
 		console := js.Global().Get("console")
 		console.Call("log", "Uploaded image length:", len(uploadedImages))
 		console.Call("log", "selectedImageIndex:", selectedImageIndex)
@@ -183,7 +240,7 @@ func updateSelectedImage(doc js.Value) {
 
 	// Update the main image display
 	selectedImg := doc.Call("getElementById", "selectedImage")
-	selectedImg.Set("src", uploadedImages[selectedImageIndex].String())
+	selectedImg.Set("src", uploadedImages[selectedImageIndex].dataURL)
 	imageStage := doc.Call("getElementById", "imageStage")
 	imageStage.Get("style").Set("transformOrigin", "center center")
 	selectionMarker := doc.Call("getElementById", "selectionMarker")
