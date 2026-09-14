@@ -6,6 +6,7 @@ import (
 	"math"
 	"strconv"
 	"syscall/js"
+	"time"
 
 	"wasm-hello/imageproc"
 )
@@ -53,7 +54,9 @@ func main() {
 	prevBtn := doc.Call("getElementById", "prevBtn")
 	nextBtn := doc.Call("getElementById", "nextBtn")
 	createWiggleBtn := doc.Call("getElementById", "createWiggleBtn")
+	wiggleSpinner := doc.Call("getElementById", "wiggleSpinner")
 	wiggleResult := doc.Call("getElementById", "wiggleResult")
+	downloadWiggleBtn := doc.Call("getElementById", "downloadWiggleBtn")
 
 	viewerContainer.Call("addEventListener", "mousemove", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		updateZoomOrigin(imageStage, selectedImage, args[0])
@@ -93,8 +96,11 @@ func main() {
 		selectedImageIndex = -1
 		imageSelections = make(map[int]imageSelection)
 		createWiggleBtn.Set("disabled", true)
+		wiggleSpinner.Get("style").Set("display", "none")
 		wiggleResult.Set("src", "")
 		wiggleResult.Get("style").Set("display", "none")
+		downloadWiggleBtn.Get("style").Set("display", "none")
+		downloadWiggleBtn.Set("href", "")
 
 		// Process all selected files
 		fileCount := files.Get("length").Int()
@@ -135,27 +141,42 @@ func main() {
 		if len(uploadedImages) == 0 {
 			return nil
 		}
+		createWiggleBtn.Set("disabled", true)
+		wiggleSpinner.Get("style").Set("display", "inline-block")
 
-		inputs := make([]imageproc.ImageInput, len(uploadedImages))
-		for index, uploadedImage := range uploadedImages {
-			inputs[index] = uploadedImage.input
-		}
+		// Need to declare this first so it can be referenced inside the function itself
+		var processWiggle js.Func
+		processWiggle = js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+			defer processWiggle.Release()
+			startedAt := time.Now()
 
-		console.Call("log", "Started creating wiggle with", len(inputs), "images")
-		result, err := imageproc.ProcessWiggle(imageproc.WiggleRequest{
-			Images:  inputs,
-			Options: imageproc.DefaultWiggleOptions(),
-		})
-		if err != nil {
-			console := js.Global().Get("console")
-			console.Call("error", err.Error())
+			inputs := make([]imageproc.ImageInput, len(uploadedImages))
+			for index, uploadedImage := range uploadedImages {
+				inputs[index] = uploadedImage.input
+			}
+
+			console.Call("log", "Started creating wiggle with", len(inputs), "images")
+			result, err := imageproc.ProcessWiggle(imageproc.WiggleRequest{
+				Images:  inputs,
+				Options: imageproc.DefaultWiggleOptions(),
+			})
+			console.Call("log", "Wiggle processing took", time.Since(startedAt).String())
+			wiggleSpinner.Get("style").Set("display", "none")
+			createWiggleBtn.Set("disabled", false)
+			if err != nil {
+				console.Call("error", err.Error())
+				return nil
+			}
+			console.Call("log", "Finished creating wiggle, GIF size:", len(result.GIF), "bytes")
+
+			gifDataURL := "data:image/gif;base64," + base64.StdEncoding.EncodeToString(result.GIF)
+			wiggleResult.Set("src", gifDataURL)
+			wiggleResult.Get("style").Set("display", "block")
+			downloadWiggleBtn.Set("href", gifDataURL)
+			downloadWiggleBtn.Get("style").Set("display", "inline-block")
 			return nil
-		}
-		console.Call("log", "Finished creating wiggle, GIF size:", len(result.GIF), "bytes")
-
-		gifDataURL := "data:image/gif;base64," + base64.StdEncoding.EncodeToString(result.GIF)
-		wiggleResult.Set("src", gifDataURL)
-		wiggleResult.Get("style").Set("display", "block")
+		})
+		js.Global().Call("setTimeout", processWiggle, 0)
 		return nil
 	}))
 
