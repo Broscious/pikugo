@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Go WebAssembly Hello World</title>
+    <title>Image WebP Converter</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -115,6 +115,9 @@
             margin-top: 20px;
             border-radius: 4px;
         }
+        #processingCanvas {
+            display: none;
+        }
         #wiggleSpinner {
             display: none;
             width: 14px;
@@ -185,18 +188,12 @@
             </div>
             
             <div id="imageGallery" class="image-gallery"></div>
-            <button id="createWiggleBtn" class="nav-button" disabled>Create Wiggle GIF<span id="wiggleSpinner" aria-label="Creating wiggle GIF"></span></button>
-            <a id="downloadWiggleBtn" class="nav-button" download="wiggle.gif" style="display: none">Download GIF</a>
-            <img id="wiggleResult" alt="Generated wiggle GIF">
+            <button id="createWiggleBtn" class="nav-button" disabled>Create WebP<span id="wiggleSpinner" aria-label="Creating WebP"></span></button>
+            <a id="downloadWiggleBtn" class="nav-button" download="wiggle.webp" style="display: none">Download WebP</a>
+            <img id="wiggleResult" alt="Generated WebP">
+            <canvas id="processingCanvas"></canvas>
         </div>
     </div>
-    <script src="wasm_exec.js"></script>
-    <script>
-        const go = new Go();
-        WebAssembly.instantiateStreaming(fetch('main.wasm'), go.importObject)
-            .then((result) => {
-                go.run(result.instance);
-            });
-    </script>
+    <script src="app.js"></script>
 </body>
 </html>
