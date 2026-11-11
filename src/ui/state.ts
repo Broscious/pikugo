@@ -36,7 +36,8 @@ export interface AppState {
   /** Options being previewed while the user hovers a control. */
   hoverOptions: Partial<AnimationOptions> | null;
   loading: boolean;
-  encoding: { done: number; total: number } | null;
+  /** Progress of the running encode: the animation, or the stills export. */
+  encoding: { task: "animation" | "stills"; done: number; total: number } | null;
   result: GeneratedResult | null;
 }
 
@@ -76,6 +77,7 @@ export function effectiveOptions(state: AppState): AnimationOptions {
 export function signatureOf(state: Pick<AppState, "images" | "options">): string {
   return JSON.stringify({
     images: state.images.map((image) => [image.id, image.focus.x, image.focus.y]),
-    options: state.options,
+    // The stills format doesn't change the animation.
+    options: { ...state.options, stillFormat: undefined },
   });
 }

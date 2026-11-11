@@ -31,8 +31,58 @@ export interface AnimationOptions {
   anchor: Point | null;
   /** Longest output edge in pixels, or null to keep the source resolution. */
   maxEdge: number | null;
-  /** Lossy encoder quality, 0..1. */
+  /** Lossy encoder quality, 0..1. Also used for JPEG and WebP stills. */
   quality: number;
+  /** File format for "Export stills". */
+  stillFormat: StillFormat;
+}
+
+export type StillFormat = "png" | "jpeg" | "webp";
+
+export interface StillFormatInfo {
+  label: string;
+  mimeType: string;
+  extension: string;
+  /** Whether the format can store transparency. */
+  alpha: boolean;
+  /** Whether the Quality setting applies. */
+  lossy: boolean;
+  /** Short trade-off summary shown under the format picker. */
+  description: string;
+}
+
+export const STILL_FORMATS: Readonly<Record<StillFormat, StillFormatInfo>> = Object.freeze({
+  png: {
+    label: "PNG",
+    mimeType: "image/png",
+    extension: "png",
+    alpha: true,
+    lossy: false,
+    description: "Lossless and keeps transparency. Opens almost anywhere, but makes the largest files.",
+  },
+  jpeg: {
+    label: "JPEG",
+    mimeType: "image/jpeg",
+    extension: "jpg",
+    alpha: false,
+    lossy: true,
+    description: "Small files that open anywhere. Uses the Quality setting. No transparency: uncovered areas become black.",
+  },
+  webp: {
+    label: "WebP",
+    mimeType: "image/webp",
+    extension: "webp",
+    alpha: true,
+    lossy: true,
+    description: "Small files that keep transparency. Uses the Quality setting. Some older apps can't open WebP.",
+  },
+});
+
+/** Colour that transparent areas are flattened onto for formats without alpha. */
+export const STILL_MATTE = "#000000";
+
+export function parseStillFormat(value: unknown): StillFormat {
+  return value === "png" || value === "jpeg" || value === "webp" ? value : DEFAULT_OPTIONS.stillFormat;
 }
 
 export const FRAME_DELAY_MIN = 20;
@@ -46,6 +96,7 @@ export const DEFAULT_OPTIONS: Readonly<AnimationOptions> = Object.freeze({
   anchor: null,
   maxEdge: 1080,
   quality: 0.85,
+  stillFormat: "png",
 });
 
 export const ASPECT_PRESETS: readonly { label: string; value: string }[] = [
@@ -124,6 +175,7 @@ export function sanitizeOptions(input: unknown): AnimationOptions {
     anchor,
     maxEdge: raw.maxEdge === null ? null : maxEdge !== undefined && maxEdge >= 16 ? Math.round(maxEdge) : DEFAULT_OPTIONS.maxEdge,
     quality: quality === undefined ? DEFAULT_OPTIONS.quality : clamp(quality, 0.05, 1),
+    stillFormat: parseStillFormat(raw.stillFormat),
   };
 }
 

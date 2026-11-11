@@ -1,6 +1,8 @@
-import { timestampedFilename } from "../core/format";
+import { stillFilename, timestampedFilename } from "../core/format";
+import { STILL_FORMATS, STILL_MATTE } from "../core/options";
+import { createZip } from "../core/zip";
 import type { Point } from "../core/geometry";
-import { encodeWebP } from "../render/encoder";
+import { encodeWebP, renderStillFrames } from "../render/encoder";
 import { byId } from "./dom";
 import { Filmstrip } from "./filmstrip";
 import { FocusEditor } from "./focus-editor";
@@ -53,6 +55,7 @@ export class App {
     byId("chooseFilesBtn", HTMLButtonElement).addEventListener("click", () => this.#fileInput.click());
     byId("sampleBtn", HTMLButtonElement).addEventListener("click", () => void this.#loadSamples());
     byId("generateBtn", HTMLButtonElement).addEventListener("click", () => void this.generate());
+    byId("stillsBtn", HTMLButtonElement).addEventListener("click", () => void this.exportStills());
     this.#fileInput.addEventListener("change", () => {
       const files = [...(this.#fileInput.files ?? [])];
       this.#fileInput.value = "";
@@ -193,7 +196,7 @@ export class App {
     }
     const signature = signatureOf(state);
     const unique = new Set(plan.sequence).size;
-    this.store.set({ encoding: { done: 0, total: unique } });
+    this.store.set({ encoding: { task: "animation", done: 0, total: unique } });
     try {
       const outcome = await encodeWebP(
         state.images.map((image) => image.bitmap),
@@ -205,7 +208,7 @@ export class App {
           frameDelay: state.options.frameDelay,
           quality: state.options.quality,
         },
-        (done, total) => this.store.set({ encoding: { done, total } }),
+        (done, total) => this.store.set({ encoding: { task: "animation", done, total } }),
       );
       const previous = this.store.state.result;
       if (previous) {
@@ -233,4 +236,62 @@ export class App {
       this.store.set({ encoding: null });
     }
   }
+
+  /**
+   * Export every photo as its own PNG, aligned and framed exactly as it appears
+   * in the animation, packaged as a .zip (or a single PNG for one photo).
+   */
+  async exportStills(): Promise<void> {
+    const state = this.store.state;
+    const { plan, error } = tryPlan(state.images, state.options);
+    if (!plan || state.encoding) {
+      if (error) {
+        toast(error, "error");
+      }
+      return;
+    }
+    const images = state.images;
+    const format = STILL_FORMATS[state.options.stillFormat];
+    this.store.set({ encoding: { task: "stills", done: 0, total: images.length } });
+    try {
+      const { stills } = await renderStillFrames(
+        images.map((image) => image.bitmap),
+        { output: plan.output, scale: plan.scale, placements: plan.layout.placements },
+        { mimeType: format.mimeType, quality: format.lossy ? state.options.quality : 1, matte: format.alpha ? null : STILL_MATTE },
+        (done, total) => this.store.set({ encoding: { task: "stills", done, total } }),
+      );
+      const names = images.map((image, index) => stillFilename(index, images.length, image.name, format.extension));
+      if (stills.length === 1) {
+        downloadBlob(new Blob([stills[0]!], { type: format.mimeType }), names[0]!);
+      } else {
+        const zip = createZip(stills.map((data, index) => ({ name: names[index]!, data })));
+        downloadBlob(new Blob([zip], { type: "application/zip" }), timestampedFilename("pikugo-stills", "zip"));
+      }
+      toast(
+        stills.length === 1
+          ? `Exported a ${plan.output.width} × ${plan.output.height} ${format.label}.`
+          : `Exported ${stills.length} ${format.label} stills (${plan.output.width} × ${plan.output.height}) as a .zip.`,
+        "success",
+      );
+    } catch (error) {
+      console.error(error);
+      toast(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      this.store.set({ encoding: null });
+    }
+  }
+}
+
+/** Save a blob through a temporary download link. */
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // Give the browser time to start the download before releasing the data.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

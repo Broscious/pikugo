@@ -44,6 +44,8 @@ describe("signatureOf", () => {
     expect(signatureOf({ images: [b, a], options: DEFAULT_OPTIONS })).not.toBe(base);
     expect(signatureOf({ images: [a, { ...b, focus: { x: 21, y: 20 } }], options: DEFAULT_OPTIONS })).not.toBe(base);
     expect(signatureOf({ images: [a, b], options: { ...DEFAULT_OPTIONS, frameDelay: 120 } })).not.toBe(base);
+    // The stills format only affects the stills export, so the animation is still current.
+    expect(signatureOf({ images: [a, b], options: { ...DEFAULT_OPTIONS, stillFormat: "jpeg" } })).toBe(base);
   });
 });
 

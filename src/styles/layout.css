@@ -934,6 +934,11 @@ main {
     padding: 16px 16px 40px;
   }
 
+  /* Stack Create and Export stills as full-width buttons. */
+  .generate-row > .button {
+    flex: 1 1 100%;
+  }
+
   .header-inner,
   .stepper {
     padding-left: 16px;

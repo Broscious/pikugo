@@ -163,6 +163,10 @@
                 <span class="icon i-sparkles" aria-hidden="true"></span>
                 <span id="generateLabel">Create WebP</span>
               </button>
+              <button id="stillsBtn" class="button button-ghost button-lg" type="button">
+                <span class="icon i-images" aria-hidden="true"></span>
+                <span id="stillsLabel">Export stills</span>
+              </button>
               <div id="progress" class="progress" hidden>
                 <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
                 <span id="progressText" class="progress-text"></span>
@@ -270,6 +274,15 @@
                 <output id="qualityOut" class="field-value" for="qualityRange"></output>
               </div>
               <input id="qualityRange" class="range" type="range" min="5" max="100" step="1" />
+            </div>
+            <div class="field">
+              <span class="field-label" id="stillFormatLabel">Stills format</span>
+              <div class="segmented" role="radiogroup" aria-labelledby="stillFormatLabel" data-option="stillFormat">
+                <button type="button" role="radio" data-value="png">PNG</button>
+                <button type="button" role="radio" data-value="jpeg">JPEG</button>
+                <button type="button" role="radio" data-value="webp">WebP</button>
+              </div>
+              <p id="stillFormatHint" class="field-hint"></p>
             </div>
           </fieldset>
         </aside>

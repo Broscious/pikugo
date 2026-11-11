@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAspect, formatBytes, formatFps, formatMilliseconds, formatPercent, timestampedFilename } from "../../src/core/format";
+import { formatAspect, formatBytes, formatFps, formatMilliseconds, formatPercent, stillFilename, timestampedFilename } from "../../src/core/format";
 
 describe("format helpers", () => {
   it("formats byte sizes", () => {
@@ -34,5 +34,21 @@ describe("format helpers", () => {
 
   it("builds timestamped filenames", () => {
     expect(timestampedFilename("pikugo", "webp", new Date(2026, 0, 2, 3, 4, 5))).toBe("pikugo-20260102-030405.webp");
+  });
+});
+
+describe("stillFilename", () => {
+  it("numbers stills so they sort in animation order", () => {
+    expect(stillFilename(0, 3, "IMG_1234.JPG")).toBe("01-IMG_1234.png");
+    expect(stillFilename(9, 3, "photo.heic")).toBe("10-photo.png");
+    expect(stillFilename(4, 120, "a.png")).toBe("005-a.png");
+  });
+
+  it("makes names safe for any file system", () => {
+    expect(stillFilename(0, 2, "Café au lait / v2?.jpeg")).toBe("01-Cafe-au-lait-v2.png");
+    expect(stillFilename(1, 2, "../../etc/passwd")).toBe("02-etc-passwd.png");
+    expect(stillFilename(0, 2, "...")).toBe("01-frame.png");
+    expect(stillFilename(0, 2, "image", "webp")).toBe("01-image.webp");
+    expect(stillFilename(0, 2, "x".repeat(200))).toHaveLength("01-".length + 60 + ".png".length);
   });
 });

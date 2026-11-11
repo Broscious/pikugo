@@ -9,6 +9,8 @@ import {
   MAX_EDGE_PRESETS,
   frameSequence,
   parsePlayback,
+  parseStillFormat,
+  STILL_FORMATS,
   parseAspectRatio,
   type AnimationOptions,
 } from "../core/options";
@@ -54,6 +56,7 @@ export class OptionsPanel {
   readonly #sizePresets = byId("sizePresets", HTMLDivElement);
   readonly #quality = byId("qualityRange", HTMLInputElement);
   readonly #qualityOut = byId("qualityOut", HTMLOutputElement);
+  readonly #stillHint = byId("stillFormatHint", HTMLParagraphElement);
   /** Last fixed anchor, restored when switching back from Auto. */
   #lastAnchor: Point = { x: 0.5, y: 0.5 };
 
@@ -98,6 +101,8 @@ export class OptionsPanel {
         return { aspect: value };
       case "maxEdge":
         return { maxEdge: value === "original" ? null : Number(value) };
+      case "stillFormat":
+        return { stillFormat: parseStillFormat(value) };
       case "anchorMode":
         return { anchor: value === "fixed" ? (this.#store.state.options.anchor ?? this.#currentAnchor()) : null };
       default:
@@ -146,7 +151,10 @@ export class OptionsPanel {
       for (const button of group.querySelectorAll<HTMLButtonElement>("[role=radio]")) {
         const value = button.dataset.value ?? "";
         button.addEventListener("click", () => this.update(this.#patchFor(option, value)));
-        this.#previewOnHover(button, () => this.#patchFor(option, value));
+        // The stills format has nothing to show in the preview.
+        if (option !== "stillFormat") {
+          this.#previewOnHover(button, () => this.#patchFor(option, value));
+        }
       }
       // Arrow keys move between radio options.
       group.addEventListener("keydown", (event) => {
@@ -219,6 +227,7 @@ export class OptionsPanel {
         : option === "aspect" ? options.aspect
         : option === "maxEdge" ? sizeValue
         : option === "anchorMode" ? anchorMode
+        : option === "stillFormat" ? options.stillFormat
         : undefined;
       for (const button of group.querySelectorAll<HTMLButtonElement>("[role=radio]")) {
         const checked = button.dataset.value === selected;
@@ -255,6 +264,7 @@ export class OptionsPanel {
 
     setRange(this.#quality, Math.round(options.quality * 100));
     this.#qualityOut.textContent = `${Math.round(options.quality * 100)}%`;
+    this.#stillHint.textContent = STILL_FORMATS[options.stillFormat].description;
     syncRangeFill(this.#quality);
   }
 }

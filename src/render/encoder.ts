@@ -1,4 +1,14 @@
-import { encodeAnimation, EncoderUnsupportedError, type EncodePlan, type FrameSurface, type ProgressCallback } from "./encode-core";
+import {
+  EncoderUnsupportedError,
+  runTask,
+  type EncodePlan,
+  type EncodeTask,
+  type FrameSurface,
+  type ProgressCallback,
+  type StillFormatPlan,
+  type StillsPlan,
+  type TaskResult,
+} from "./encode-core";
 import type { EncodeRequest, EncodeResponse } from "./protocol";
 
 export type EncoderEngine = "worker" | "main-thread";
@@ -28,12 +38,12 @@ function getWorker(): Worker {
   return worker;
 }
 
-async function encodeInWorker(images: readonly ImageBitmap[], plan: EncodePlan, onProgress?: ProgressCallback) {
+async function runInWorker(images: readonly ImageBitmap[], task: EncodeTask, onProgress?: ProgressCallback): Promise<TaskResult> {
   // The worker takes ownership of the bitmaps it receives, so send copies.
   const copies = await Promise.all(images.map((image) => createImageBitmap(image)));
   const target = getWorker();
   const id = nextRequestId++;
-  return new Promise<{ bytes: Uint8Array<ArrayBuffer>; frameCount: number }>((resolve, reject) => {
+  return new Promise<TaskResult>((resolve, reject) => {
     const cleanup = () => {
       target.removeEventListener("message", onMessage);
       target.removeEventListener("error", onError);
@@ -49,7 +59,7 @@ async function encodeInWorker(images: readonly ImageBitmap[], plan: EncodePlan, 
       }
       cleanup();
       if (message.kind === "done") {
-        resolve({ bytes: message.bytes, frameCount: message.frameCount });
+        resolve(message.result);
       } else if (message.name === "EncoderUnsupportedError") {
         reject(new EncoderUnsupportedError());
       } else {
@@ -63,15 +73,15 @@ async function encodeInWorker(images: readonly ImageBitmap[], plan: EncodePlan, 
     };
     target.addEventListener("message", onMessage);
     target.addEventListener("error", onError);
-    const request: EncodeRequest = { id, images: copies, plan };
+    const request: EncodeRequest = { id, images: copies, ...task };
     target.postMessage(request, copies);
   });
 }
 
-async function encodeOnMainThread(images: readonly CanvasImageSource[], plan: EncodePlan, onProgress?: ProgressCallback) {
+async function runOnMainThread(images: readonly CanvasImageSource[], task: EncodeTask, onProgress?: ProgressCallback): Promise<TaskResult> {
   const canvas = document.createElement("canvas");
-  canvas.width = plan.output.width;
-  canvas.height = plan.output.height;
+  canvas.width = task.plan.output.width;
+  canvas.height = task.plan.output.height;
   const context = canvas.getContext("2d");
   if (!context) {
     throw new Error("Canvas 2D rendering is unavailable in this browser");
@@ -83,30 +93,24 @@ async function encodeOnMainThread(images: readonly CanvasImageSource[], plan: En
         canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new EncoderUnsupportedError())), type, quality);
       }),
   };
-  return encodeAnimation(images, plan, surface, onProgress);
+  return runTask(images, task, surface, onProgress);
 }
 
 /**
- * Encode an animated WebP. Prefers a Web Worker with OffscreenCanvas so the
- * page stays responsive, and falls back to the main thread when that is not
- * available.
+ * Run a task, preferring a Web Worker with OffscreenCanvas so the page stays
+ * responsive, and falling back to the main thread when that is not available.
  */
-export async function encodeWebP(
+async function run(
   images: readonly ImageBitmap[],
-  plan: EncodePlan,
+  task: EncodeTask,
   onProgress?: ProgressCallback,
-): Promise<EncodeOutcome> {
+): Promise<{ result: TaskResult; engine: EncoderEngine; elapsedMs: number }> {
   const startedAt = performance.now();
-  const finish = (result: { bytes: Uint8Array<ArrayBuffer>; frameCount: number }, engine: EncoderEngine): EncodeOutcome => ({
-    blob: new Blob([result.bytes], { type: "image/webp" }),
-    frameCount: result.frameCount,
-    engine,
-    elapsedMs: performance.now() - startedAt,
-  });
+  const finish = (result: TaskResult, engine: EncoderEngine) => ({ result, engine, elapsedMs: performance.now() - startedAt });
 
   if (supportsWorkerEncoding() && !workerBroken) {
     try {
-      return finish(await encodeInWorker(images, plan, onProgress), "worker");
+      return finish(await runInWorker(images, task, onProgress), "worker");
     } catch (error) {
       if (error instanceof EncoderUnsupportedError) {
         throw error;
@@ -117,5 +121,35 @@ export async function encodeWebP(
       worker = null;
     }
   }
-  return finish(await encodeOnMainThread(images, plan, onProgress), "main-thread");
+  return finish(await runOnMainThread(images, task, onProgress), "main-thread");
+}
+
+/** Encode an animated WebP (or a still WebP for a single frame). */
+export async function encodeWebP(images: readonly ImageBitmap[], plan: EncodePlan, onProgress?: ProgressCallback): Promise<EncodeOutcome> {
+  const { result, engine, elapsedMs } = await run(images, { task: "animation", plan }, onProgress);
+  if (result.task !== "animation") {
+    throw new Error("Encoder returned the wrong kind of result");
+  }
+  return { blob: new Blob([result.bytes], { type: "image/webp" }), frameCount: result.frameCount, engine, elapsedMs };
+}
+
+export interface StillsOutcome {
+  /** One PNG per source image, in photo order. */
+  stills: Uint8Array<ArrayBuffer>[];
+  engine: EncoderEngine;
+  elapsedMs: number;
+}
+
+/** Render each source image as its own aligned, framed still. */
+export async function renderStillFrames(
+  images: readonly ImageBitmap[],
+  plan: StillsPlan,
+  format: StillFormatPlan,
+  onProgress?: ProgressCallback,
+): Promise<StillsOutcome> {
+  const { result, engine, elapsedMs } = await run(images, { task: "stills", plan, format }, onProgress);
+  if (result.task !== "stills") {
+    throw new Error("Encoder returned the wrong kind of result");
+  }
+  return { stills: result.stills, engine, elapsedMs };
 }

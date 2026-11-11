@@ -5,6 +5,8 @@ import {
   FRAME_DELAY_MIN,
   frameSequence,
   parsePlayback,
+  parseStillFormat,
+  STILL_FORMATS,
   layoutOptionsFrom,
   parseAspectRatio,
   sanitizeOptions,
@@ -48,6 +50,7 @@ describe("sanitizeOptions", () => {
       anchor: { x: 0.25, y: 0.75 },
       maxEdge: null,
       quality: 0.5,
+      stillFormat: "jpeg",
     };
     expect(sanitizeOptions(options)).toEqual(options);
   });
@@ -61,6 +64,7 @@ describe("sanitizeOptions", () => {
       anchor: { x: 5, y: -1 },
       maxEdge: 2,
       quality: 9,
+      stillFormat: "gif",
     });
     expect(result).toEqual({
       frameDelay: FRAME_DELAY_MIN,
@@ -70,6 +74,7 @@ describe("sanitizeOptions", () => {
       anchor: { x: 1, y: 0 },
       maxEdge: DEFAULT_OPTIONS.maxEdge,
       quality: 1,
+      stillFormat: "png",
     });
     expect(sanitizeOptions({ frameDelay: 1e9 }).frameDelay).toBe(FRAME_DELAY_MAX);
   });
@@ -102,6 +107,14 @@ describe("frameSequence", () => {
     expect(frameSequence(2, "smooth")).toEqual([0, 1]);
     expect(frameSequence(1, "smooth")).toEqual([0]);
     expect(frameSequence(0, "smooth")).toEqual([]);
+  });
+
+  it("parses still formats", () => {
+    expect(parseStillFormat("png")).toBe("png");
+    expect(parseStillFormat("jpeg")).toBe("jpeg");
+    expect(parseStillFormat("webp")).toBe("webp");
+    expect(parseStillFormat("gif")).toBe("png");
+    expect(STILL_FORMATS.jpeg).toMatchObject({ extension: "jpg", alpha: false, lossy: true });
   });
 
   it("parses playback modes", () => {

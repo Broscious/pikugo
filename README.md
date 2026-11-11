@@ -22,6 +22,13 @@ server: the site is a static bundle hosted on GitHub Pages.
 - **Live preview**: an animated canvas showing the output frame, the area all photos share, each photo's
   edges and the cropped-away parts. Hovering or focusing any option previews it before you apply it.
 - **Output**: longest-edge limit and quality, with the size, duration and coverage shown before encoding.
+- **Export stills**: download every photo as its own image, aligned and framed exactly as it appears in the
+  animation (same size and crop). Several photos come as a `.zip` with files numbered in photo order
+  (`01-IMG_1234.png`, …); a single photo downloads on its own. Formats:
+  - **PNG** (default): lossless and keeps transparency. Opens almost anywhere, but makes the largest files.
+  - **JPEG**: small files that open anywhere, using the Quality setting. JPEG has no transparency, so in
+    layer mode the uncovered areas are filled with black.
+  - **WebP**: small files that keep transparency, using the Quality setting. Some older apps can't open it.
 - **Fast encoding**: frames are drawn on an `OffscreenCanvas` in a Web Worker, compressed with the browser's
   native WebP encoder, and muxed into an animated WebP. If OffscreenCanvas isn't available, it falls back to
   the main thread.
@@ -73,8 +80,9 @@ src/
     plan.ts                Combines layout, scaling and sequence into an encode plan
     webp.ts                RIFF/WebP chunk reader and animated WebP muxer
     format.ts              Display formatting helpers
+    zip.ts                 Minimal ZIP writer/reader for the stills export
   render/
-    encode-core.ts         Draw + encode + mux pipeline shared by worker and main thread
+    encode-core.ts         Draw + encode pipeline (animation and stills) shared by worker and main thread
     encode.worker.ts       OffscreenCanvas encoder running in a Web Worker
     encoder.ts             Picks worker or main-thread encoding
     protocol.ts            Worker message types

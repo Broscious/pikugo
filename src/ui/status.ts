@@ -16,6 +16,8 @@ export class Summary {
   readonly #summary = byId("summary", HTMLDListElement);
   readonly #generate = byId("generateBtn", HTMLButtonElement);
   readonly #generateLabel = byId("generateLabel", HTMLSpanElement);
+  readonly #stills = byId("stillsBtn", HTMLButtonElement);
+  readonly #stillsLabel = byId("stillsLabel", HTMLSpanElement);
   readonly #progress = byId("progress", HTMLDivElement);
   readonly #progressBar = byId("progressBar", HTMLDivElement);
   readonly #progressText = byId("progressText", HTMLSpanElement);
@@ -51,12 +53,19 @@ export class Summary {
 
     const encoding = state.encoding;
     this.#generate.disabled = !plan || encoding !== null;
-    this.#generateLabel.textContent = encoding ? "Encoding…" : state.images.length > 1 ? "Create animated WebP" : "Create WebP";
+    this.#generateLabel.textContent =
+      encoding?.task === "animation" ? "Encoding…" : state.images.length > 1 ? "Create animated WebP" : "Create WebP";
+    this.#stills.disabled = !plan || encoding !== null;
+    this.#stillsLabel.textContent = encoding?.task === "stills" ? "Exporting…" : state.images.length > 1 ? "Export stills" : "Export still";
+    this.#stills.title =
+      state.images.length > 1
+        ? "Download each photo as a PNG, aligned and framed exactly as in the animation (.zip)"
+        : "Download the framed photo as a PNG";
     this.#progress.hidden = encoding === null;
     if (encoding) {
       const fraction = encoding.total > 0 ? encoding.done / encoding.total : 0;
       this.#progressBar.style.width = `${fraction * 100}%`;
-      this.#progressText.textContent = `Frame ${Math.min(encoding.done + 1, encoding.total)} of ${encoding.total}`;
+      this.#progressText.textContent = `${encoding.task === "stills" ? "Still" : "Frame"} ${Math.min(encoding.done + 1, encoding.total)} of ${encoding.total}`;
     }
   }
 }

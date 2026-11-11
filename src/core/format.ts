@@ -51,3 +51,23 @@ export function timestampedFilename(prefix: string, extension: string, date = ne
   const stamp = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
   return `${prefix}-${stamp}.${extension}`;
 }
+
+/**
+ * File name for one exported still: a zero-padded position (so the files sort
+ * in animation order) followed by a filesystem-safe version of the photo name.
+ */
+export function stillFilename(index: number, count: number, sourceName: string, extension = "png"): string {
+  const width = Math.max(2, String(count).length);
+  const base =
+    sourceName
+      // Drop the extension (only from the last path segment).
+      .replace(/\.[^./]*$/, "")
+      // Decompose and drop accents: "café" → "cafe".
+      .normalize("NFKD")
+      .replace(/\p{M}+/gu, "")
+      .replace(/[^\w.-]+/g, "-")
+      .replace(/-{2,}/g, "-")
+      .replace(/^[-.]+|[-.]+$/g, "")
+      .slice(0, 60) || "frame";
+  return `${String(index + 1).padStart(width, "0")}-${base}.${extension}`;
+}

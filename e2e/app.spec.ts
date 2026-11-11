@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { inspectAnimation, readChunks } from "../src/core/webp";
+import { readZip } from "../src/core/zip";
 
 /** Collect uncaught errors and console errors so every test can assert a clean run. */
 function trackErrors(page: Page): string[] {
@@ -34,6 +36,21 @@ async function generate(page: Page): Promise<Uint8Array> {
     return Array.from(new Uint8Array(buffer));
   });
   return Uint8Array.from(bytes);
+}
+
+/** Click "Export stills" and return the downloaded file. */
+async function exportStills(page: Page) {
+  const pending = page.waitForEvent("download");
+  await page.locator("#stillsBtn").click();
+  const download = await pending;
+  return { filename: download.suggestedFilename(), bytes: new Uint8Array(await readFile(await download.path())) };
+}
+
+/** Width and height from a PNG's IHDR chunk. */
+function pngSize(bytes: Uint8Array) {
+  expect([...bytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
 }
 
 async function resultSize(page: Page) {
@@ -236,4 +253,83 @@ test("options persist across reloads and the theme toggles", async ({ page }) =>
   await page.locator("#themeToggle").click();
   const after = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(after).not.toBe(before);
+});
+
+test("stills export as aligned PNGs in a zip, matching the animation", async ({ page }) => {
+  const errors = trackErrors(page);
+  await loadSamples(page);
+  await page.getByRole("radio", { name: /Layer with transparency/ }).click();
+  const animation = inspectAnimation(await generate(page));
+
+  const { filename, bytes } = await exportStills(page);
+  expect(filename).toMatch(/^pikugo-stills-\d{8}-\d{6}\.zip$/);
+  const entries = readZip(bytes);
+  // One still per photo, in photo order, even though smooth bounce repeats frames.
+  expect(entries.map((entry) => entry.name)).toEqual(["01-sample-1.png", "02-sample-2.png", "03-sample-3.png"]);
+  for (const entry of entries) {
+    expect(pngSize(entry.data)).toEqual({ width: animation.width, height: animation.height });
+  }
+  await expect(page.locator("#stillsBtn")).toBeEnabled();
+  await expect(page.locator(".toast").last()).toContainText("Exported 3 PNG stills");
+  expect(errors).toEqual([]);
+});
+
+test("a single photo exports as one PNG", async ({ page }) => {
+  await loadSamples(page);
+  for (let i = 0; i < 2; i += 1) {
+    await page.locator(".film-item").first().hover();
+    await page.locator(".film-action.is-remove").first().click();
+  }
+  await expect(page.locator("#stillsLabel")).toHaveText("Export still");
+  const { filename, bytes } = await exportStills(page);
+  expect(filename).toBe("01-sample-3.png");
+  expect(pngSize(bytes).width).toBeGreaterThan(0);
+});
+
+test("stills can be exported as JPEG, flattened onto black where photos don't cover", async ({ page }) => {
+  await loadSamples(page);
+  await page.getByRole("radio", { name: /Layer with transparency/ }).click();
+  await page.getByRole("radio", { name: "JPEG" }).click();
+  await expect(page.locator("#stillFormatHint")).toContainText("become black");
+  // Changing the stills format doesn't affect the animation, so the preview badge doesn't appear.
+  await expect(page.locator("#previewBadge")).toBeHidden();
+
+  const { bytes } = await exportStills(page);
+  const entries = readZip(bytes);
+  expect(entries.map((entry) => entry.name)).toEqual(["01-sample-1.jpg", "02-sample-2.jpg", "03-sample-3.jpg"]);
+  await expect(page.locator(".toast").last()).toContainText("Exported 3 JPEG stills");
+
+  // Decode each JPEG in the browser and look at its corners: in layer mode some are uncovered.
+  const corners = await page.evaluate(async (files) => {
+    const results: number[][] = [];
+    for (const data of files) {
+      const bitmap = await createImageBitmap(new Blob([new Uint8Array(data)], { type: "image/jpeg" }));
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext("2d")!;
+      context.drawImage(bitmap, 0, 0);
+      for (const [x, y] of [[1, 1], [bitmap.width - 2, 1], [1, bitmap.height - 2], [bitmap.width - 2, bitmap.height - 2]]) {
+        results.push([...context.getImageData(x!, y!, 1, 1).data]);
+      }
+    }
+    return results;
+  }, entries.map((entry) => Array.from(entry.data)));
+  for (const entry of entries) {
+    expect([...entry.data.subarray(0, 2)]).toEqual([0xff, 0xd8]);
+  }
+  expect(corners.every((pixel) => pixel[3] === 255)).toBe(true);
+  expect(corners.some((pixel) => pixel[0]! < 16 && pixel[1]! < 16 && pixel[2]! < 16)).toBe(true);
+});
+
+test("stills can be exported as WebP and the format persists", async ({ page }) => {
+  await loadSamples(page);
+  await page.getByRole("radio", { name: "WebP", exact: true }).click();
+  const { bytes } = await exportStills(page);
+  const entries = readZip(bytes);
+  expect(entries.map((entry) => entry.name.split(".").pop())).toEqual(["webp", "webp", "webp"]);
+  for (const entry of entries) {
+    expect(readChunks(entry.data).length).toBeGreaterThan(0);
+  }
+  await page.reload();
+  await page.getByRole("button", { name: "Try sample photos" }).click();
+  await expect(page.getByRole("radio", { name: "WebP", exact: true })).toHaveAttribute("aria-checked", "true");
 });

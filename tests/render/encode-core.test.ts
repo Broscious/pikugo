@@ -1,5 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { drawFrame, encodeAnimation, EncoderUnsupportedError, type EncodePlan, type FrameSurface } from "../../src/render/encode-core";
+import {
+  drawFrame,
+  encodeAnimation,
+  EncoderUnsupportedError,
+  renderStills,
+  resultBuffers,
+  runTask,
+  type StillFormatPlan,
+  type EncodePlan,
+  type FrameSurface,
+} from "../../src/render/encode-core";
 import { encodeChunk, inspectAnimation, wrapRiff } from "../../src/core/webp";
 
 type Call = [string, ...unknown[]];
@@ -97,5 +107,77 @@ describe("encodeAnimation", () => {
   it("requires a placement per image", async () => {
     const { surface } = fakeSurface();
     await expect(encodeAnimation([image(0)], plan(), surface)).rejects.toThrow(/placement/);
+  });
+});
+
+const PNG: StillFormatPlan = { mimeType: "image/png", quality: 1, matte: null };
+const JPEG: StillFormatPlan = { mimeType: "image/jpeg", quality: 0.8, matte: "#000000" };
+
+describe("renderStills", () => {
+  /** The fake surface tags each "encoded" image with the id of the image drawn last (first payload byte). */
+  const drawnId = (bytes: Uint8Array) => bytes[20];
+
+  it("renders one still per photo, in photo order, with the animation's placements", async () => {
+    const { surface, calls, toBlob } = fakeSurface("image/png");
+    const progress = vi.fn();
+    const stills = await renderStills([image(5), image(6), image(7)], plan(), PNG, surface, progress);
+    expect(stills.map(drawnId)).toEqual([5, 6, 7]);
+    expect(toBlob).toHaveBeenCalledTimes(3);
+    expect(toBlob).toHaveBeenCalledWith("image/png", 1);
+    expect(calls).toContainEqual(["drawImage", image(6), -10, 5, 100, 80]);
+    // Formats with alpha keep transparent areas transparent.
+    expect(calls.some(([name]) => name === "fillRect")).toBe(false);
+    expect(progress.mock.calls).toEqual([
+      [1, 3],
+      [2, 3],
+      [3, 3],
+    ]);
+  });
+
+  it("flattens onto the matte behind the photo for formats without alpha", async () => {
+    const { surface, calls, toBlob } = fakeSurface("image/jpeg");
+    await renderStills([image(0)], plan({ placements: [plan().placements[0]!] }), JPEG, surface);
+    expect(toBlob).toHaveBeenCalledWith("image/jpeg", 0.8);
+    const names = calls.map(([name, value]) => (name.startsWith("set:") ? `${name}=${String(value)}` : name));
+    const drawn = names.indexOf("drawImage");
+    const behind = names.indexOf("set:globalCompositeOperation=destination-over");
+    expect(drawn).toBeLessThan(behind);
+    expect(names.slice(behind)).toEqual([
+      "set:globalCompositeOperation=destination-over",
+      "set:fillStyle=#000000",
+      "fillRect",
+      "set:globalCompositeOperation=source-over",
+    ]);
+    expect(calls).toContainEqual(["fillRect", 0, 0, 50, 40]);
+  });
+
+  it("ignores the playback sequence", async () => {
+    const { surface } = fakeSurface("image/png");
+    const stills = await renderStills([image(0), image(1), image(2)], plan({ sequence: [0, 1, 2, 2, 1, 0] }), PNG, surface);
+    expect(stills).toHaveLength(3);
+  });
+
+  it("fails clearly when the browser can't produce the format", async () => {
+    const webp: StillFormatPlan = { mimeType: "image/webp", quality: 0.8, matte: null };
+    await expect(renderStills([image(0), image(1), image(2)], plan(), webp, fakeSurface("image/png").surface)).rejects.toThrow(
+      "This browser can't export WEBP images from a canvas. Try PNG instead.",
+    );
+  });
+
+  it("requires a placement per image", async () => {
+    const { surface } = fakeSurface("image/png");
+    await expect(renderStills([image(0)], plan(), PNG, surface)).rejects.toThrow(/placement/);
+  });
+});
+
+describe("runTask", () => {
+  it("dispatches stills and animation tasks and lists their buffers for transfer", async () => {
+    const stills = await runTask([image(0), image(1), image(2)], { task: "stills", plan: plan(), format: PNG }, fakeSurface("image/png").surface);
+    expect(stills.task).toBe("stills");
+    expect(resultBuffers(stills)).toHaveLength(3);
+
+    const animation = await runTask([image(0), image(1), image(2)], { task: "animation", plan: plan() }, fakeSurface().surface);
+    expect(animation).toMatchObject({ task: "animation", frameCount: 3 });
+    expect(resultBuffers(animation)).toHaveLength(1);
   });
 });

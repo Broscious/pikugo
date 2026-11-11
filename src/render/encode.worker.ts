@@ -1,5 +1,5 @@
-/// Encodes animation frames on an OffscreenCanvas, off the main thread.
-import { encodeAnimation, type FrameSurface } from "./encode-core";
+/// Encodes animation frames and stills on an OffscreenCanvas, off the main thread.
+import { resultBuffers, runTask, type FrameSurface } from "./encode-core";
 import type { EncodeRequest, EncodeResponse } from "./protocol";
 
 function reply(message: EncodeResponse, transfer: Transferable[] = []): void {
@@ -7,10 +7,10 @@ function reply(message: EncodeResponse, transfer: Transferable[] = []): void {
 }
 
 self.addEventListener("message", (event: MessageEvent<EncodeRequest>) => {
-  const { id, images, plan } = event.data;
+  const { id, images, ...task } = event.data;
   void (async () => {
     try {
-      const canvas = new OffscreenCanvas(plan.output.width, plan.output.height);
+      const canvas = new OffscreenCanvas(task.plan.output.width, task.plan.output.height);
       const context = canvas.getContext("2d");
       if (!context) {
         throw new Error("OffscreenCanvas 2D context is unavailable");
@@ -19,10 +19,8 @@ self.addEventListener("message", (event: MessageEvent<EncodeRequest>) => {
         context,
         toBlob: (type, quality) => canvas.convertToBlob({ type, quality }),
       };
-      const result = await encodeAnimation(images, plan, surface, (done, total) =>
-        reply({ id, kind: "progress", done, total }),
-      );
-      reply({ id, kind: "done", bytes: result.bytes, frameCount: result.frameCount }, [result.bytes.buffer]);
+      const result = await runTask(images, task, surface, (done, total) => reply({ id, kind: "progress", done, total }));
+      reply({ id, kind: "done", result }, resultBuffers(result));
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       reply({ id, kind: "error", name: err.name, message: err.message });
