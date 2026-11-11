@@ -10,13 +10,15 @@ server: the site is a static bundle hosted on GitHub Pages.
 
 - **Focus editor**: click to set each photo's focal point. Hover to magnify, use onion skin to overlay the
   previous photo under your cursor, and use the keyboard (`←`/`→` to switch photos, `Shift`+arrows to nudge).
-- **Frame delay**: 20–5000 ms per frame (default 100 ms), with presets, plus **Loop** or **Bounce** playback.
+- **Frame delay**: 20–5000 ms per frame (default 100 ms), with presets, plus **Loop**, **Bounce** (1 2 3 2) or **Smooth bounce** (the default: 1 2 3 3 2 1, holding each end frame at the turnaround so the change of direction feels natural).
 - **Framing options**
   - **Crop to overlap**: keep only the area every photo covers, so frames never show empty corners.
   - **Layer with transparency**: keep every pixel. Areas a photo doesn't cover become transparent.
   - **Aspect ratio**: presets (1:1, 4:5, 4:3, 3:2, 16:9, 9:16) or any custom `W:H` / decimal.
   - **Focus position**: *Auto* centres the subject as far as the photos allow. *Fixed* pins it to a chosen
-    spot in the frame (3×3 snap grid, X/Y sliders, or drag the frame in the preview).
+    spot in the frame. The 3×3 grid snaps to the rule-of-thirds guides: corners put the subject where two
+    guide lines cross, edges put it on the middle of one guide line, and the centre keeps it centred. X/Y
+    sliders and dragging the frame in the preview allow any position.
 - **Live preview**: an animated canvas showing the output frame, the area all photos share, each photo's
   edges and the cropped-away parts. Hovering or focusing any option previews it before you apply it.
 - **Output**: longest-edge limit and quality, with the size, duration and coverage shown before encoding.

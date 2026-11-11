@@ -505,8 +505,20 @@
   background: transparent;
 }
 
+/* Pull the outer dots onto the guide lines so the grid shows where the focus lands. */
+.anchor-grid button:nth-child(3n + 1) { --dx: 50%; }
+.anchor-grid button:nth-child(3n) { --dx: -50%; }
+.anchor-grid button:nth-child(-n + 3) { --dy: 50%; }
+.anchor-grid button:nth-child(n + 7) { --dy: -50%; }
+
+.anchor-grid button:nth-child(3n + 1)::after { justify-self: end; }
+.anchor-grid button:nth-child(3n)::after { justify-self: start; }
+.anchor-grid button:nth-child(-n + 3)::after { align-self: end; }
+.anchor-grid button:nth-child(n + 7)::after { align-self: start; }
+
 .anchor-grid button::after {
   content: "";
+  translate: var(--dx, 0) var(--dy, 0);
   width: 6px;
   height: 6px;
   border-radius: 50%;

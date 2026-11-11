@@ -209,8 +209,9 @@
             <div class="field">
               <span class="field-label" id="playbackLabel">Playback</span>
               <div class="segmented" role="radiogroup" aria-labelledby="playbackLabel" data-option="playback">
-                <button type="button" role="radio" data-value="loop"><span class="icon i-repeat" aria-hidden="true"></span> Loop</button>
-                <button type="button" role="radio" data-value="bounce"><span class="icon i-bounce" aria-hidden="true"></span> Bounce</button>
+                <button type="button" role="radio" data-value="loop" title="Plays forwards and starts over: 1 2 3"><span class="icon i-repeat" aria-hidden="true"></span> Loop</button>
+                <button type="button" role="radio" data-value="bounce" title="Forwards then backwards: 1 2 3 2"><span class="icon i-bounce" aria-hidden="true"></span> Bounce</button>
+                <button type="button" role="radio" data-value="smooth" title="Smooth bounce: holds the end frames at each turnaround, 1 2 3 3 2 1"><span class="icon i-bounce-smooth" aria-hidden="true"></span> Smooth</button>
               </div>
             </div>
           </fieldset>

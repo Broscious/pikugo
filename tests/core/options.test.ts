@@ -4,6 +4,7 @@ import {
   FRAME_DELAY_MAX,
   FRAME_DELAY_MIN,
   frameSequence,
+  parsePlayback,
   layoutOptionsFrom,
   parseAspectRatio,
   sanitizeOptions,
@@ -32,8 +33,9 @@ describe("parseAspectRatio", () => {
 });
 
 describe("sanitizeOptions", () => {
-  it("defaults to a 100ms frame delay", () => {
+  it("defaults to a 100ms frame delay and smooth bounce", () => {
     expect(DEFAULT_OPTIONS.frameDelay).toBe(100);
+    expect(DEFAULT_OPTIONS.playback).toBe("smooth");
     expect(sanitizeOptions(undefined)).toEqual(DEFAULT_OPTIONS);
   });
 
@@ -62,7 +64,7 @@ describe("sanitizeOptions", () => {
     });
     expect(result).toEqual({
       frameDelay: FRAME_DELAY_MIN,
-      playback: "loop",
+      playback: DEFAULT_OPTIONS.playback,
       edges: "crop",
       aspect: "free",
       anchor: { x: 1, y: 0 },
@@ -92,6 +94,21 @@ describe("frameSequence", () => {
   it("bounces without doubling the end frames", () => {
     expect(frameSequence(4, "bounce")).toEqual([0, 1, 2, 3, 2, 1]);
     expect(frameSequence(3, "bounce")).toEqual([0, 1, 2, 1]);
+  });
+
+  it("smooth bounce shows each end frame twice", () => {
+    expect(frameSequence(4, "smooth")).toEqual([0, 1, 2, 3, 3, 2, 1, 0]);
+    expect(frameSequence(3, "smooth")).toEqual([0, 1, 2, 2, 1, 0]);
+    expect(frameSequence(2, "smooth")).toEqual([0, 1]);
+    expect(frameSequence(1, "smooth")).toEqual([0]);
+    expect(frameSequence(0, "smooth")).toEqual([]);
+  });
+
+  it("parses playback modes", () => {
+    expect(parsePlayback("loop")).toBe("loop");
+    expect(parsePlayback("bounce")).toBe("bounce");
+    expect(parsePlayback("smooth")).toBe("smooth");
+    expect(parsePlayback(undefined)).toBe(DEFAULT_OPTIONS.playback);
   });
 
   it("does not bounce one or two frames", () => {

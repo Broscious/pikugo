@@ -8,6 +8,7 @@ import {
   FRAME_DELAY_MIN,
   MAX_EDGE_PRESETS,
   frameSequence,
+  parsePlayback,
   parseAspectRatio,
   type AnimationOptions,
 } from "../core/options";
@@ -16,8 +17,24 @@ import { tryPlan, type AppState, type AppStore } from "./state";
 
 type OptionPatch = Partial<AnimationOptions>;
 
-const ANCHOR_POINTS: Point[] = [0, 0.5, 1].flatMap((y) => [0, 0.5, 1].map((x) => ({ x, y })));
-const ANCHOR_NAMES = ["Top left", "Top", "Top right", "Left", "Centre", "Right", "Bottom left", "Bottom", "Bottom right"];
+/**
+ * Snap positions follow the rule-of-thirds guides: the corners of the grid are
+ * where two guide lines cross, the edges are the midpoints of a single guide
+ * line, and the middle is the centre of the frame.
+ */
+const THIRDS = [1 / 3, 0.5, 2 / 3];
+const ANCHOR_POINTS: Point[] = THIRDS.flatMap((y) => THIRDS.map((x) => ({ x, y })));
+const ANCHOR_NAMES = [
+  "Top left intersection",
+  "Top line",
+  "Top right intersection",
+  "Left line",
+  "Centre",
+  "Right line",
+  "Bottom left intersection",
+  "Bottom line",
+  "Bottom right intersection",
+];
 
 /** The options sidebar. Every control previews its effect on hover. */
 export class OptionsPanel {
@@ -74,7 +91,7 @@ export class OptionsPanel {
   #patchFor(option: string, value: string): OptionPatch {
     switch (option) {
       case "playback":
-        return { playback: value === "bounce" ? "bounce" : "loop" };
+        return { playback: parsePlayback(value) };
       case "edges":
         return { edges: value === "layer" ? "layer" : "crop" };
       case "aspect":

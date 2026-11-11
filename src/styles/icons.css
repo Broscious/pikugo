@@ -19,6 +19,7 @@
 .i-alert { --icon: url("../assets/icons/alert.svg"); }
 .i-bolt { --icon: url("../assets/icons/bolt.svg"); }
 .i-bounce { --icon: url("../assets/icons/bounce.svg"); }
+.i-bounce-smooth { --icon: url("../assets/icons/bounce-smooth.svg"); }
 .i-center { --icon: url("../assets/icons/center.svg"); }
 .i-check { --icon: url("../assets/icons/check.svg"); }
 .i-chevron-left { --icon: url("../assets/icons/chevron-left.svg"); }

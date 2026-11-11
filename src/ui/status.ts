@@ -1,4 +1,5 @@
 import { formatAspect, formatBytes, formatFps, formatMilliseconds, formatPercent } from "../core/format";
+import { PLAYBACK_LABELS } from "../core/options";
 import { byId, h } from "./dom";
 import { signatureOf, tryPlan, type AppState, type AppStore } from "./state";
 
@@ -34,7 +35,7 @@ export class Summary {
       const empty = Math.max(0, ...plan.layout.emptyFraction);
       const entries = [
         entry("Output", `${plan.output.width} × ${plan.output.height}`, formatAspect(plan.output.width, plan.output.height)),
-        entry("Frames", String(plan.sequence.length), state.options.playback === "bounce" ? "bounce" : "loop"),
+        entry("Frames", String(plan.sequence.length), PLAYBACK_LABELS[state.options.playback].toLowerCase()),
         entry("Loop", formatMilliseconds(plan.durationMs), formatFps(state.options.frameDelay)),
       ];
       if (state.options.edges === "layer") {

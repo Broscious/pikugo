@@ -1,6 +1,24 @@
 import { clamp, type EdgeMode, type LayoutOptions, type Point } from "./geometry";
 
-export type Playback = "loop" | "bounce";
+/**
+ * - loop: 0 1 2 3 | 0 1 2 3
+ * - bounce: forwards then backwards, end frames shown once: 0 1 2 3 2 1 | 0 ...
+ * - smooth: forwards then backwards, end frames shown twice so the turnaround
+ *   lingers like a real change of direction: 0 1 2 3 3 2 1 0 | 0 ...
+ * Both bounce modes need at least 3 frames; with fewer they play as a loop.
+ */
+export type Playback = "loop" | "bounce" | "smooth";
+
+export const PLAYBACK_LABELS: Readonly<Record<Playback, string>> = Object.freeze({
+  loop: "Loop",
+  bounce: "Bounce",
+  smooth: "Smooth bounce",
+});
+
+/** Narrow an arbitrary value to a playback mode, falling back to the default. */
+export function parsePlayback(value: unknown): Playback {
+  return value === "loop" || value === "bounce" || value === "smooth" ? value : DEFAULT_OPTIONS.playback;
+}
 
 export interface AnimationOptions {
   /** Time each frame is shown, in milliseconds. */
@@ -22,7 +40,7 @@ export const FRAME_DELAY_MAX = 5000;
 
 export const DEFAULT_OPTIONS: Readonly<AnimationOptions> = Object.freeze({
   frameDelay: 100,
-  playback: "loop",
+  playback: "smooth",
   edges: "crop",
   aspect: "free",
   anchor: null,
@@ -100,7 +118,7 @@ export function sanitizeOptions(input: unknown): AnimationOptions {
   }
   return {
     frameDelay: delay === undefined ? DEFAULT_OPTIONS.frameDelay : Math.round(clamp(delay, FRAME_DELAY_MIN, FRAME_DELAY_MAX)),
-    playback: raw.playback === "bounce" ? "bounce" : "loop",
+    playback: parsePlayback(raw.playback),
     edges: raw.edges === "layer" ? "layer" : "crop",
     aspect,
     anchor,
@@ -109,14 +127,14 @@ export function sanitizeOptions(input: unknown): AnimationOptions {
   };
 }
 
-/**
- * Order in which source images are shown. "bounce" plays forwards then
- * backwards without repeating the end frames: 0 1 2 3 2 1 | 0 1 2 ...
- */
+/** Order in which source images are shown (see {@link Playback}). */
 export function frameSequence(count: number, playback: Playback): number[] {
   const forward = Array.from({ length: Math.max(0, count) }, (_, index) => index);
-  if (playback === "loop" || count < 3) {
-    return forward;
+  if (playback === "smooth" && count >= 3) {
+    return [...forward, ...forward.slice().reverse()];
   }
-  return [...forward, ...forward.slice(1, -1).reverse()];
+  if (playback === "bounce" && count >= 3) {
+    return [...forward, ...forward.slice(1, -1).reverse()];
+  }
+  return forward;
 }

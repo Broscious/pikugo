@@ -56,6 +56,8 @@ describe("describePreview", () => {
     [{ anchor: null }, "Automatic focus position"],
     [{ frameDelay: 150 }, "150 ms per frame"],
     [{ playback: "bounce" as const }, "Bounce playback"],
+    [{ playback: "smooth" as const }, "Smooth bounce playback"],
+    [{ playback: "loop" as const }, "Loop playback"],
     [{ maxEdge: null }, "Original size"],
   ])("describes %j", (patch, text) => {
     expect(describePreview(patch)).toBe(text);

@@ -68,7 +68,8 @@ test("sample photos produce a valid animated WebP in a worker", async ({ page })
   await loadSamples(page);
   const bytes = await generate(page);
   const info = inspectAnimation(bytes);
-  expect(info.frames).toHaveLength(3);
+  // Default playback is smooth bounce: 0 1 2 2 1 0.
+  expect(info.frames).toHaveLength(6);
   expect(info.frames.every((frame) => frame.duration === 100)).toBe(true);
   expect(info.loopCount).toBe(0);
   // The browser can decode what we produced.
@@ -82,11 +83,14 @@ test("frame delay and bounce playback are written to the file", async ({ page })
   await loadSamples(page);
   await page.locator("#delayInput").fill("250");
   await page.locator("#delayInput").press("Enter");
-  await page.getByRole("radio", { name: "Bounce" }).click();
+  await page.getByRole("radio", { name: "Bounce", exact: true }).click();
   await expect(page.locator("#delayHint")).toContainText("4.0 fps");
   const info = inspectAnimation(await generate(page));
   expect(info.frames).toHaveLength(4);
   expect(info.frames.map((frame) => frame.duration)).toEqual([250, 250, 250, 250]);
+
+  await page.getByRole("radio", { name: "Loop" }).click();
+  expect(inspectAnimation(await generate(page)).frames).toHaveLength(3);
 });
 
 test("aspect ratio crops to the requested shape", async ({ page }) => {
@@ -115,14 +119,22 @@ test("layer mode keeps every pixel and writes transparency", async ({ page }) =>
 
 test("fixed focus position changes the framing", async ({ page }) => {
   await loadSamples(page);
+  const auto = inspectAnimation(await generate(page));
   await page.getByRole("radio", { name: "Fixed" }).click();
-  await page.getByRole("button", { name: "Top left" }).click();
-  await expect(page.locator("#anchorXOut")).toHaveText("0%");
-  await expect(page.locator("#anchorYOut")).toHaveText("0%");
+  // Grid corners snap to where the rule-of-thirds lines cross.
+  await page.getByRole("button", { name: "Top left intersection" }).click();
+  await expect(page.locator("#anchorXOut")).toHaveText("33%");
+  await expect(page.locator("#anchorYOut")).toHaveText("33%");
+  await expect(page.getByRole("button", { name: "Top left intersection" })).toHaveAttribute("aria-pressed", "true");
   const info = inspectAnimation(await generate(page));
-  // The subject sits in the top-left corner, so only the space below/right of it is usable.
-  expect(info.width).toBeLessThan(600);
-  expect(info.height).toBeLessThan(300);
+  // Pinning the subject off-centre leaves less usable space than the automatic framing.
+  expect(info.width).toBeLessThan(auto.width);
+  expect(info.height).toBeLessThan(auto.height);
+
+  // Edge buttons snap to the middle of a single guide line.
+  await page.getByRole("button", { name: "Right line" }).click();
+  await expect(page.locator("#anchorXOut")).toHaveText("67%");
+  await expect(page.locator("#anchorYOut")).toHaveText("50%");
 });
 
 test("dragging the preview frame pins the focus position", async ({ page }) => {

@@ -1,5 +1,5 @@
 import type { Point, Rect } from "../core/geometry";
-import type { AnimationOptions } from "../core/options";
+import { PLAYBACK_LABELS, type AnimationOptions } from "../core/options";
 import { byId, prefersReducedMotion } from "./dom";
 import { effectiveOptions, tryPlan, type AppState, type AppStore, type PlanResult } from "./state";
 
@@ -75,7 +75,7 @@ export function describePreview(patch: Partial<AnimationOptions>): string {
     return `${patch.frameDelay} ms per frame`;
   }
   if (patch.playback) {
-    return patch.playback === "bounce" ? "Bounce playback" : "Loop playback";
+    return `${PLAYBACK_LABELS[patch.playback]} playback`;
   }
   if ("maxEdge" in patch) {
     return patch.maxEdge === null ? "Original size" : `Longest edge ${patch.maxEdge}px`;
