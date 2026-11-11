@@ -1,0 +1,9 @@
+{
+  // Node-side code: build/test configuration and the Playwright end-to-end tests.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["e2e", "vite.config.ts", "playwright.config.ts"]
+}

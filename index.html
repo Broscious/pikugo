@@ -1,199 +1,311 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image WebP Converter</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            background-color: #f5f5f5;
-        }
-        h1 {
-            color: #00758f;
-        }
-        p {
-            color: #333;
-            font-size: 16px;
-        }
-        .container {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .upload-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-        }
-        input[type="file"] {
-            margin: 10px 0;
-        }
-        .image-gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .gallery-item {
-            position: relative;
-            border-radius: 4px;
-            overflow: hidden;
-            aspect-ratio: 1;
-        }
-        .gallery-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .gallery-item img:hover {
-            transform: scale(1.05);
-        }
-        .gallery-item img.selected {
-            border: 3px solid #00758f;
-            box-sizing: border-box;
-        }
-        .image-viewer {
-            margin-top: 20px;
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        .viewer-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 15px;
-            background-color: #f0f0f0;
-            border-bottom: 1px solid #ddd;
-        }
-        .nav-button {
-            background-color: #00758f;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.2s;
-        }
-        .nav-button:hover {
-            background-color: #005a6f;
-        }
-        .nav-button:active {
-            background-color: #003d4d;
-        }
-        .image-counter {
-            font-weight: bold;
-            color: #333;
-        }
-        .viewer-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            background-color: white;
-            min-height: 300px;
-            overflow: hidden;
-            cursor: crosshair;
-        }
-        #selectedImage {
-            display: block;
-            max-width: 100%;
-            max-height: 500px;
-            border-radius: 4px;
-        }
-        #wiggleResult {
-            display: none;
-            max-width: 100%;
-            max-height: 500px;
-            margin-top: 20px;
-            border-radius: 4px;
-        }
-        #processingCanvas {
-            display: none;
-        }
-        #wiggleSpinner {
-            display: none;
-            width: 14px;
-            height: 14px;
-            margin-left: 8px;
-            border: 2px solid rgba(255, 255, 255, 0.35);
-            border-top-color: white;
-            border-radius: 50%;
-            vertical-align: middle;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .image-stage {
-            position: relative;
-            line-height: 0;
-            transition: transform 0.2s ease;
-            transform: scale(1);
-        }
-        .image-stage.zoomed {
-            transform: scale(2);
-        }
-        .selection-marker {
-            display: none;
-            position: absolute;
-            width: 16px;
-            height: 16px;
-            border: 1px solid #e4572e;
-            border-radius: 50%;
-            background-color: rgba(255, 255, 255, 0.5);
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-            pointer-events: none;
-            transform: translate(-50%, -50%);
-        }
-        .selection-marker::after {
-            content: "";
-            position: absolute;
-            width: 3px;
-            height: 3px;
-            top: 50%;
-            left: 50%;
-            border-radius: 50%;
-            background-color: #e4572e;
-            transform: translate(-50%, -50%);
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div id="greeting"></div>
-        <div class="upload-section">
-            <h2>Upload Images</h2>
-            <input type="file" id="fileInput" accept="image/*" multiple>
-            
-            <div id="imageViewer" class="image-viewer" style="display: none;">
-                <div class="viewer-header">
-                    <button id="prevBtn" class="nav-button">← Previous</button>
-                    <span id="imageCounter" class="image-counter"></span>
-                    <button id="nextBtn" class="nav-button">Next →</button>
-                </div>
-                <div id="viewerContainer" class="viewer-container">
-                    <div id="imageStage" class="image-stage">
-                        <img id="selectedImage" alt="Selected image">
-                        <span id="selectionMarker" class="selection-marker" aria-label="Selected image position"></span>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="imageGallery" class="image-gallery"></div>
-            <button id="createWiggleBtn" class="nav-button" disabled>Create WebP<span id="wiggleSpinner" aria-label="Creating WebP"></span></button>
-            <a id="downloadWiggleBtn" class="nav-button" download="wiggle.webp" style="display: none">Download WebP</a>
-            <img id="wiggleResult" alt="Generated WebP">
-            <canvas id="processingCanvas"></canvas>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Turn a handful of photos into a smooth, aligned wiggle animation (animated WebP). Runs entirely in your browser: nothing is uploaded." />
+    <meta name="theme-color" content="#6d4aff" />
+    <title>Pikugo · Wiggle Animation Studio</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <script>
+      // Apply the saved theme before first paint to avoid a flash.
+      try {
+        const theme = localStorage.getItem("pikugo:theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="./" aria-label="Pikugo home">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="brand-text">
+            <span class="brand-name">Pikugo</span>
+            <span class="brand-tag">Wiggle animation studio</span>
+          </span>
+        </a>
+        <nav class="header-nav" aria-label="Primary">
+          <a class="nav-link" href="#how"><span class="icon i-info" aria-hidden="true"></span><span>How it works</span></a>
+          <span class="badge badge-private" title="Images never leave your device">
+            <span class="icon i-shield" aria-hidden="true"></span><span>Private · on-device</span>
+          </span>
+          <button id="themeToggle" class="icon-button" type="button" aria-label="Switch to dark theme">
+            <span class="icon i-moon" aria-hidden="true"></span>
+          </button>
+        </nav>
+      </div>
+      <ol id="stepper" class="stepper" aria-label="Progress">
+        <li data-step="photos"><a href="#filmstrip"><span class="step-dot"></span><span class="step-label">Add photos</span><span class="step-detail"></span></a></li>
+        <li data-step="focus"><a href="#editor"><span class="step-dot"></span><span class="step-label">Pick focus</span><span class="step-detail"></span></a></li>
+        <li data-step="frame"><a href="#options"><span class="step-dot"></span><span class="step-label">Frame &amp; timing</span><span class="step-detail"></span></a></li>
+        <li data-step="export"><a href="#preview"><span class="step-dot"></span><span class="step-label">Export</span><span class="step-detail"></span></a></li>
+      </ol>
+    </header>
+
+    <main id="main">
+      <section id="hero" class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="icon i-sparkles" aria-hidden="true"></span> Animated WebP, made in your browser</p>
+          <h1 id="hero-title">Turn a burst of photos into a <span class="gradient-text">smooth wiggle</span>.</h1>
+          <p class="lead">
+            Pick the point that should stay still in each photo. Pikugo lines them up, frames the result the way you want, and
+            encodes an animated WebP on your device.
+          </p>
+          <div class="hero-actions">
+            <button id="chooseFilesBtn" class="button button-primary button-lg" type="button">
+              <span class="icon i-upload" aria-hidden="true"></span> Choose photos
+            </button>
+            <button id="sampleBtn" class="button button-ghost button-lg" type="button">
+              <span class="icon i-wand" aria-hidden="true"></span> Try sample photos
+            </button>
+          </div>
+          <p class="drop-hint">…or drop images anywhere on this page.</p>
+          <ul class="feature-list">
+            <li><span class="icon i-bolt" aria-hidden="true"></span> Encodes off the main thread</li>
+            <li><span class="icon i-layers" aria-hidden="true"></span> Crop, layer or pin the focus</li>
+            <li><span class="icon i-shield" aria-hidden="true"></span> Nothing is uploaded</li>
+          </ul>
         </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="art-card art-card-1"><span class="art-sun"></span><span class="art-hill"></span><span class="art-subject"></span></div>
+          <div class="art-card art-card-2"><span class="art-sun"></span><span class="art-hill"></span><span class="art-subject"></span></div>
+          <div class="art-card art-card-3"><span class="art-sun"></span><span class="art-hill"></span><span class="art-subject"></span></div>
+          <span class="art-reticle"></span>
+        </div>
+      </section>
+
+      <section id="workspace" class="workspace" hidden>
+        <div class="workspace-main">
+          <section id="editor" class="panel" aria-labelledby="editor-title">
+            <header class="panel-head">
+              <h2 id="editor-title"><span class="icon i-target" aria-hidden="true"></span> Focus point</h2>
+              <div class="toolbar">
+                <button id="magnifyToggle" aria-label="Magnify on hover" class="toggle" type="button" aria-pressed="true" title="Magnify on hover">
+                  <span class="icon i-eye" aria-hidden="true"></span><span class="toggle-label">Magnify</span>
+                </button>
+                <button id="onionToggle" aria-label="Onion skin" class="toggle" type="button" aria-pressed="false" title="Overlay the previous photo, aligned to your cursor">
+                  <span class="icon i-onion" aria-hidden="true"></span><span class="toggle-label">Onion skin</span>
+                </button>
+                <button id="centerFocusBtn" aria-label="Centre focus point" class="button button-quiet" type="button" title="Reset this photo's focus to its centre">
+                  <span class="icon i-center" aria-hidden="true"></span><span class="toggle-label">Centre</span>
+                </button>
+              </div>
+            </header>
+            <div class="viewer">
+              <button id="prevBtn" class="viewer-nav viewer-prev" type="button" aria-label="Previous photo">
+                <span class="icon i-chevron-left" aria-hidden="true"></span>
+              </button>
+              <div id="viewerContainer" class="viewer-container" tabindex="0" aria-describedby="viewerHint">
+                <div id="imageStage" class="image-stage">
+                  <img id="selectedImage" alt="" draggable="false" />
+                  <img id="onionImage" class="onion-image" alt="" draggable="false" hidden />
+                  <span id="selectionMarker" class="selection-marker" aria-hidden="true"></span>
+                </div>
+              </div>
+              <button id="nextBtn" class="viewer-nav viewer-next" type="button" aria-label="Next photo">
+                <span class="icon i-chevron-right" aria-hidden="true"></span>
+              </button>
+              <span id="imageCounter" class="viewer-counter" aria-live="polite"></span>
+            </div>
+            <p id="viewerHint" class="hint">
+              <span class="icon i-info" aria-hidden="true"></span>
+              <span>Click the subject that should stay still. <kbd>←</kbd>&nbsp;<kbd>→</kbd> switch photos,
+              <kbd>Shift</kbd>+arrows nudge the point.</span>
+            </p>
+            <div class="filmstrip-head">
+              <h3><span class="icon i-images" aria-hidden="true"></span> Frames <span id="frameCount" class="count-badge">0</span></h3>
+              <button id="clearBtn" class="button button-quiet button-danger" type="button">
+                <span class="icon i-trash" aria-hidden="true"></span> Clear all
+              </button>
+            </div>
+            <ol id="filmstrip" class="filmstrip" aria-label="Frames"></ol>
+          </section>
+
+          <section id="preview" class="panel" aria-labelledby="preview-title">
+            <header class="panel-head">
+              <h2 id="preview-title"><span class="icon i-play" aria-hidden="true"></span> Live preview</h2>
+              <div class="toolbar">
+                <button id="playToggle" class="toggle" type="button" aria-pressed="true" aria-label="Pause preview">
+                  <span class="icon i-pause" aria-hidden="true"></span>
+                </button>
+                <button id="stepBtn" class="toggle" type="button" aria-label="Next frame">
+                  <span class="icon i-step" aria-hidden="true"></span>
+                </button>
+                <button id="guidesToggle" aria-label="Guides" class="toggle" type="button" aria-pressed="true">
+                  <span class="icon i-grid" aria-hidden="true"></span><span class="toggle-label">Guides</span>
+                </button>
+                <button id="ghostToggle" aria-label="Show cropped areas" class="toggle" type="button" aria-pressed="true" title="Show the parts of each photo that get cropped away">
+                  <span class="icon i-crop" aria-hidden="true"></span><span class="toggle-label">Show cropped</span>
+                </button>
+              </div>
+            </header>
+            <div id="previewStage" class="preview-stage">
+              <canvas id="previewCanvas" aria-label="Animated preview of the framing"></canvas>
+              <span id="previewBadge" class="preview-badge" hidden></span>
+              <p id="previewError" class="preview-error" role="alert" hidden></p>
+            </div>
+            <div class="preview-footer">
+              <ul class="legend" aria-label="Guide legend">
+                <li><span class="swatch swatch-frame"></span>Output frame</li>
+                <li><span class="swatch swatch-shared"></span>Area all photos share</li>
+                <li><span class="swatch swatch-bounds"></span>Photo edges</li>
+                <li><span class="swatch swatch-empty"></span>Transparent</li>
+              </ul>
+              <p class="hint hint-tight"><span class="icon i-info" aria-hidden="true"></span><span>Drag the frame to pin where the subject sits. Hover any option to preview it.</span></p>
+            </div>
+            <dl id="summary" class="summary"></dl>
+            <div class="generate-row">
+              <button id="generateBtn" class="button button-primary button-lg" type="button">
+                <span class="icon i-sparkles" aria-hidden="true"></span>
+                <span id="generateLabel">Create WebP</span>
+              </button>
+              <div id="progress" class="progress" hidden>
+                <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+                <span id="progressText" class="progress-text"></span>
+              </div>
+            </div>
+          </section>
+
+          <section id="result" class="panel result-panel" aria-labelledby="result-title" hidden>
+            <header class="panel-head">
+              <h2 id="result-title"><span class="icon i-check" aria-hidden="true"></span> Your animation</h2>
+              <span id="staleBadge" class="badge badge-warning" hidden>
+                <span class="icon i-alert" aria-hidden="true"></span> Settings changed since this was made
+              </span>
+            </header>
+            <div class="result-body">
+              <div class="result-image checkerboard"><img id="resultImage" alt="Generated animated WebP" /></div>
+              <div class="result-side">
+                <dl id="resultStats" class="stats"></dl>
+                <a id="downloadBtn" class="button button-primary" download="pikugo.webp">
+                  <span class="icon i-download" aria-hidden="true"></span> Download WebP
+                </a>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside id="options" class="panel options-panel" aria-labelledby="options-title">
+          <header class="panel-head">
+            <h2 id="options-title"><span class="icon i-resize" aria-hidden="true"></span> Animation options</h2>
+            <button id="resetOptionsBtn" class="button button-quiet" type="button">Reset</button>
+          </header>
+
+          <fieldset class="option-group">
+            <legend><span class="icon i-clock" aria-hidden="true"></span> Timing</legend>
+            <div class="field">
+              <div class="field-head">
+                <label for="delayRange">Frame delay</label>
+                <span class="field-value"><input id="delayInput" class="number-input" type="number" min="20" max="5000" step="10" inputmode="numeric" aria-label="Frame delay in milliseconds" /> ms</span>
+              </div>
+              <input id="delayRange" class="range" type="range" min="20" max="1000" step="10" />
+              <div class="chips" id="delayPresets" role="group" aria-label="Delay presets"></div>
+              <p id="delayHint" class="field-hint"></p>
+            </div>
+            <div class="field">
+              <span class="field-label" id="playbackLabel">Playback</span>
+              <div class="segmented" role="radiogroup" aria-labelledby="playbackLabel" data-option="playback">
+                <button type="button" role="radio" data-value="loop"><span class="icon i-repeat" aria-hidden="true"></span> Loop</button>
+                <button type="button" role="radio" data-value="bounce"><span class="icon i-bounce" aria-hidden="true"></span> Bounce</button>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="option-group">
+            <legend><span class="icon i-crop" aria-hidden="true"></span> Framing</legend>
+            <div class="field">
+              <span class="field-label" id="edgesLabel">Edges</span>
+              <div class="mode-cards" role="radiogroup" aria-labelledby="edgesLabel" data-option="edges">
+                <button type="button" role="radio" class="mode-card" data-value="crop">
+                  <span class="diagram diagram-crop" aria-hidden="true"><i></i><i></i><b></b></span>
+                  <span class="mode-title">Crop to overlap</span>
+                  <span class="mode-desc">Only keep pixels every photo has. No empty corners.</span>
+                </button>
+                <button type="button" role="radio" class="mode-card" data-value="layer">
+                  <span class="diagram diagram-layer" aria-hidden="true"><i></i><i></i><b></b></span>
+                  <span class="mode-title">Layer with transparency</span>
+                  <span class="mode-desc">Keep every pixel. Gaps become transparent.</span>
+                </button>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label" id="aspectLabel"><span class="icon i-ratio" aria-hidden="true"></span> Aspect ratio</span>
+              <div class="chips" id="aspectPresets" role="radiogroup" aria-labelledby="aspectLabel" data-option="aspect"></div>
+              <div class="inline-input">
+                <label for="aspectCustom">Custom</label>
+                <input id="aspectCustom" class="text-input" type="text" placeholder="e.g. 5:4 or 1.91" autocomplete="off" spellcheck="false" />
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label" id="anchorLabel"><span class="icon i-target" aria-hidden="true"></span> Focus position in frame</span>
+              <div class="segmented" role="radiogroup" aria-labelledby="anchorLabel" data-option="anchorMode">
+                <button type="button" role="radio" data-value="auto">Auto</button>
+                <button type="button" role="radio" data-value="fixed">Fixed</button>
+              </div>
+              <div id="anchorControls" class="anchor-controls">
+                <div id="anchorGrid" class="anchor-grid" role="group" aria-label="Snap focus to a position"></div>
+                <div class="anchor-sliders">
+                  <label class="slider-row"><span>X</span><input id="anchorX" class="range" type="range" min="0" max="100" step="1" /><output id="anchorXOut"></output></label>
+                  <label class="slider-row"><span>Y</span><input id="anchorY" class="range" type="range" min="0" max="100" step="1" /><output id="anchorYOut"></output></label>
+                </div>
+              </div>
+              <p class="field-hint">Auto centres the subject as far as the photos allow. Fixed keeps it at the same spot in the frame. You can also drag the frame in the preview.</p>
+            </div>
+          </fieldset>
+
+          <fieldset class="option-group">
+            <legend><span class="icon i-gauge" aria-hidden="true"></span> Output</legend>
+            <div class="field">
+              <span class="field-label" id="sizeLabel">Longest edge (px)</span>
+              <div class="chips" id="sizePresets" role="radiogroup" aria-labelledby="sizeLabel" data-option="maxEdge"></div>
+            </div>
+            <div class="field">
+              <div class="field-head">
+                <label for="qualityRange">Quality</label>
+                <output id="qualityOut" class="field-value" for="qualityRange"></output>
+              </div>
+              <input id="qualityRange" class="range" type="range" min="5" max="100" step="1" />
+            </div>
+          </fieldset>
+        </aside>
+      </section>
+
+      <section id="how" class="how" aria-labelledby="how-title">
+        <h2 id="how-title">How it works</h2>
+        <div class="how-grid">
+          <article class="how-card">
+            <span class="how-icon"><span class="icon i-target" aria-hidden="true"></span></span>
+            <h3>Align</h3>
+            <p>Each photo is shifted so the focus points you picked land on the same pixel. That point stays still while everything else wiggles around it.</p>
+          </article>
+          <article class="how-card">
+            <span class="how-icon"><span class="icon i-crop" aria-hidden="true"></span></span>
+            <h3>Frame</h3>
+            <p>Crop to the area every photo shares, or layer them and keep all of it. Then pick an aspect ratio and decide where the subject sits.</p>
+          </article>
+          <article class="how-card">
+            <span class="how-icon"><span class="icon i-bolt" aria-hidden="true"></span></span>
+            <h3>Encode</h3>
+            <p>A background worker draws each frame on an OffscreenCanvas, compresses it with your browser's WebP encoder, and stitches the frames into one animated file.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>Pikugo runs entirely in your browser. Your photos are never uploaded.</p>
+    </footer>
+
+    <div id="dropOverlay" class="drop-overlay" hidden>
+      <div class="drop-card"><span class="icon i-upload" aria-hidden="true"></span><p>Drop photos to add them</p></div>
     </div>
-    <script src="app.js"></script>
-</body>
+    <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+    <input id="fileInput" type="file" accept="image/*" multiple hidden />
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

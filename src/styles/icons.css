@@ -1,0 +1,50 @@
+/*
+ * Icon set. Each SVG is inlined into the built stylesheet as a data URI
+ * (see build.assetsInlineLimit in vite.config.ts), so icons cost no extra
+ * requests. They are drawn with mask-image, so they take on `currentColor`.
+ *
+ * Usage: <span class="icon i-upload" aria-hidden="true"></span>
+ */
+.icon {
+  display: inline-block;
+  flex: none;
+  width: var(--icon-size, 1.15em);
+  height: var(--icon-size, 1.15em);
+  vertical-align: -0.2em;
+  background-color: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+}
+
+.i-alert { --icon: url("../assets/icons/alert.svg"); }
+.i-bolt { --icon: url("../assets/icons/bolt.svg"); }
+.i-bounce { --icon: url("../assets/icons/bounce.svg"); }
+.i-center { --icon: url("../assets/icons/center.svg"); }
+.i-check { --icon: url("../assets/icons/check.svg"); }
+.i-chevron-left { --icon: url("../assets/icons/chevron-left.svg"); }
+.i-chevron-right { --icon: url("../assets/icons/chevron-right.svg"); }
+.i-clock { --icon: url("../assets/icons/clock.svg"); }
+.i-close { --icon: url("../assets/icons/close.svg"); }
+.i-crop { --icon: url("../assets/icons/crop.svg"); }
+.i-download { --icon: url("../assets/icons/download.svg"); }
+.i-eye { --icon: url("../assets/icons/eye.svg"); }
+.i-gauge { --icon: url("../assets/icons/gauge.svg"); }
+.i-grid { --icon: url("../assets/icons/grid.svg"); }
+.i-images { --icon: url("../assets/icons/images.svg"); }
+.i-info { --icon: url("../assets/icons/info.svg"); }
+.i-layers { --icon: url("../assets/icons/layers.svg"); }
+.i-moon { --icon: url("../assets/icons/moon.svg"); }
+.i-onion { --icon: url("../assets/icons/onion.svg"); }
+.i-pause { --icon: url("../assets/icons/pause.svg"); }
+.i-play { --icon: url("../assets/icons/play.svg"); }
+.i-ratio { --icon: url("../assets/icons/ratio.svg"); }
+.i-repeat { --icon: url("../assets/icons/repeat.svg"); }
+.i-resize { --icon: url("../assets/icons/resize.svg"); }
+.i-shield { --icon: url("../assets/icons/shield.svg"); }
+.i-sparkles { --icon: url("../assets/icons/sparkles.svg"); }
+.i-step { --icon: url("../assets/icons/step.svg"); }
+.i-sun { --icon: url("../assets/icons/sun.svg"); }
+.i-target { --icon: url("../assets/icons/target.svg"); }
+.i-trash { --icon: url("../assets/icons/trash.svg"); }
+.i-upload { --icon: url("../assets/icons/upload.svg"); }
+.i-wand { --icon: url("../assets/icons/wand.svg"); }

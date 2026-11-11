@@ -1,0 +1,121 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--header-h) + 64px);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 85% -10%, var(--bg-glow), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, var(--bg-glow), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  margin: 0;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+}
+
+img {
+  max-width: 100%;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 0.35em;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 100;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
+.checkerboard {
+  background-color: var(--checker-a);
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

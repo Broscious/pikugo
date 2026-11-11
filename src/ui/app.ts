@@ -1,0 +1,236 @@
+import { timestampedFilename } from "../core/format";
+import type { Point } from "../core/geometry";
+import { encodeWebP } from "../render/encoder";
+import { byId } from "./dom";
+import { Filmstrip } from "./filmstrip";
+import { FocusEditor } from "./focus-editor";
+import { createSampleImages, disposeImage, isImageFile, loadImageFile } from "./images";
+import { OptionsPanel } from "./options-panel";
+import { loadOptions, saveOptions, setupThemeToggle } from "./persistence";
+import { Preview } from "./preview";
+import { createAppStore, signatureOf, tryPlan, type AppStore, type SourceImage } from "./state";
+import { ResultView, Stepper, Summary } from "./status";
+import { toast } from "./toast";
+
+/** Wires the page together. */
+export class App {
+  readonly store: AppStore;
+  readonly #fileInput = byId("fileInput", HTMLInputElement);
+  readonly #hero = byId("hero", HTMLElement);
+  readonly #workspace = byId("workspace", HTMLElement);
+  readonly #dropOverlay = byId("dropOverlay", HTMLDivElement);
+  readonly #options: OptionsPanel;
+
+  constructor() {
+    this.store = createAppStore(loadOptions());
+    setupThemeToggle();
+    new FocusEditor(this.store);
+    new Filmstrip(this.store, {
+      addFiles: () => this.#fileInput.click(),
+      remove: (id) => this.#remove(id),
+      move: (id, offset) => this.#move(id, offset),
+      clear: () => this.#clear(),
+    });
+    this.#options = new OptionsPanel(this.store);
+    new Preview(this.store, (anchor: Point) => this.#options.update({ anchor }));
+    new Summary(this.store);
+    new Stepper(this.store);
+    new ResultView(this.store);
+
+    this.store.subscribe((state, previous) => {
+      if (state.options !== previous.options) {
+        saveOptions(state.options);
+      }
+      if (state.images.length !== previous.images.length) {
+        this.#hero.hidden = state.images.length > 0;
+        this.#workspace.hidden = state.images.length === 0;
+      }
+    });
+    this.#bind();
+  }
+
+  #bind(): void {
+    byId("chooseFilesBtn", HTMLButtonElement).addEventListener("click", () => this.#fileInput.click());
+    byId("sampleBtn", HTMLButtonElement).addEventListener("click", () => void this.#loadSamples());
+    byId("generateBtn", HTMLButtonElement).addEventListener("click", () => void this.generate());
+    this.#fileInput.addEventListener("change", () => {
+      const files = [...(this.#fileInput.files ?? [])];
+      this.#fileInput.value = "";
+      void this.addFiles(files);
+    });
+
+    // Drop files anywhere on the page.
+    let dragDepth = 0;
+    const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes("Files") ?? false;
+    window.addEventListener("dragenter", (event) => {
+      if (hasFiles(event)) {
+        dragDepth += 1;
+        this.#dropOverlay.hidden = false;
+      }
+    });
+    window.addEventListener("dragleave", (event) => {
+      if (hasFiles(event)) {
+        dragDepth = Math.max(0, dragDepth - 1);
+        this.#dropOverlay.hidden = dragDepth > 0;
+      }
+    });
+    window.addEventListener("dragover", (event) => {
+      if (hasFiles(event)) {
+        event.preventDefault();
+      }
+    });
+    window.addEventListener("drop", (event) => {
+      if (!hasFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      dragDepth = 0;
+      this.#dropOverlay.hidden = true;
+      void this.addFiles([...(event.dataTransfer?.files ?? [])]);
+    });
+
+    // Paste images from the clipboard.
+    window.addEventListener("paste", (event) => {
+      const files = [...(event.clipboardData?.files ?? [])].filter(isImageFile);
+      if (files.length > 0) {
+        void this.addFiles(files);
+      }
+    });
+  }
+
+  async addFiles(files: File[]): Promise<void> {
+    const images = files.filter(isImageFile);
+    if (files.length > 0 && images.length === 0) {
+      toast("Those files don't look like images.", "error");
+      return;
+    }
+    if (images.length === 0) {
+      return;
+    }
+    this.store.set({ loading: true });
+    const results = await Promise.allSettled(images.map((file) => loadImageFile(file)));
+    const loaded: SourceImage[] = [];
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        loaded.push(result.value);
+      } else {
+        toast(result.reason instanceof Error ? result.reason.message : String(result.reason), "error");
+      }
+    }
+    this.#append(loaded);
+    this.store.set({ loading: false });
+  }
+
+  async #loadSamples(): Promise<void> {
+    try {
+      this.#append(await createSampleImages());
+      toast("Sample photos loaded. Their focus points are already set. Try the framing options!", "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
+
+  #append(images: SourceImage[]): void {
+    if (images.length === 0) {
+      return;
+    }
+    this.store.set((state) => ({
+      images: [...state.images, ...images],
+      active: state.active < 0 ? 0 : state.images.length,
+    }));
+    if (this.store.state.images.length === images.length) {
+      requestAnimationFrame(() => document.getElementById("editor")?.scrollIntoView({ block: "start" }));
+    }
+  }
+
+  #remove(id: string): void {
+    const { images, active } = this.store.state;
+    const index = images.findIndex((image) => image.id === id);
+    const image = images[index];
+    if (!image) {
+      return;
+    }
+    disposeImage(image);
+    const remaining = images.filter((candidate) => candidate.id !== id);
+    this.store.set({
+      images: remaining,
+      active: Math.min(remaining.length - 1, index < active ? active - 1 : active),
+    });
+  }
+
+  #move(id: string, offset: number): void {
+    const { images, active } = this.store.state;
+    const from = images.findIndex((image) => image.id === id);
+    const to = from + offset;
+    if (from < 0 || to < 0 || to >= images.length) {
+      return;
+    }
+    const reordered = [...images];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved!);
+    const activeId = images[active]?.id;
+    this.store.set({ images: reordered, active: reordered.findIndex((image) => image.id === activeId) });
+  }
+
+  #clear(): void {
+    const { images, result } = this.store.state;
+    images.forEach(disposeImage);
+    if (result) {
+      URL.revokeObjectURL(result.url);
+    }
+    this.store.set({ images: [], active: -1, result: null });
+    window.scrollTo({ top: 0 });
+  }
+
+  async generate(): Promise<void> {
+    const state = this.store.state;
+    const { plan, error } = tryPlan(state.images, state.options);
+    if (!plan || state.encoding) {
+      if (error) {
+        toast(error, "error");
+      }
+      return;
+    }
+    const signature = signatureOf(state);
+    const unique = new Set(plan.sequence).size;
+    this.store.set({ encoding: { done: 0, total: unique } });
+    try {
+      const outcome = await encodeWebP(
+        state.images.map((image) => image.bitmap),
+        {
+          output: plan.output,
+          scale: plan.scale,
+          placements: plan.layout.placements,
+          sequence: plan.sequence,
+          frameDelay: state.options.frameDelay,
+          quality: state.options.quality,
+        },
+        (done, total) => this.store.set({ encoding: { done, total } }),
+      );
+      const previous = this.store.state.result;
+      if (previous) {
+        URL.revokeObjectURL(previous.url);
+      }
+      this.store.set({
+        result: {
+          url: URL.createObjectURL(outcome.blob),
+          filename: timestampedFilename("pikugo", "webp"),
+          bytes: outcome.blob.size,
+          width: plan.output.width,
+          height: plan.output.height,
+          frameCount: outcome.frameCount,
+          durationMs: plan.durationMs,
+          elapsedMs: outcome.elapsedMs,
+          engine: outcome.engine,
+          signature,
+        },
+      });
+      requestAnimationFrame(() => document.getElementById("result")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    } catch (error) {
+      console.error(error);
+      toast(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      this.store.set({ encoding: null });
+    }
+  }
+}
