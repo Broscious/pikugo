@@ -20,6 +20,7 @@ export async function loadImageFile(file: Blob & { name?: string }): Promise<Sou
     height: bitmap.height,
     focus: { x: Math.round(bitmap.width / 2), y: Math.round(bitmap.height / 2) },
     focusSet: false,
+    autoMatch: null,
   };
 }
 

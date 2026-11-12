@@ -11,8 +11,10 @@ export interface SourceImage extends FrameSource {
   url: string;
   /** Decoded pixels, orientation applied, used for drawing. */
   bitmap: ImageBitmap;
-  /** Whether the user has chosen a focal point yet. */
+  /** Whether the focal point has been chosen (by hand or by auto-match). */
   focusSet: boolean;
+  /** Set when the focal point was found automatically rather than placed by hand. */
+  autoMatch: { score: number; referenceId: string } | null;
 }
 
 export interface GeneratedResult {
@@ -38,6 +40,8 @@ export interface AppState {
   loading: boolean;
   /** Progress of the running encode: the animation, or the stills export. */
   encoding: { task: "animation" | "stills"; done: number; total: number } | null;
+  /** Progress while focal points are being matched across photos. */
+  matching: { done: number; total: number } | null;
   result: GeneratedResult | null;
 }
 
@@ -51,6 +55,7 @@ export function createAppStore(options: AnimationOptions = { ...DEFAULT_OPTIONS 
     hoverOptions: null,
     loading: false,
     encoding: null,
+    matching: null,
     result: null,
   });
 }
@@ -80,4 +85,9 @@ export function signatureOf(state: Pick<AppState, "images" | "options">): string
     // The stills format doesn't change the animation.
     options: { ...state.options, stillFormat: undefined },
   });
+}
+
+/** Photos whose focal point the user placed by hand. */
+export function isManualFocus(image: SourceImage): boolean {
+  return image.focusSet && image.autoMatch === null;
 }

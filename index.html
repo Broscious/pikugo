@@ -90,6 +90,9 @@
                 <button id="onionToggle" aria-label="Onion skin" class="toggle" type="button" aria-pressed="false" title="Overlay the previous photo, aligned to your cursor">
                   <span class="icon i-onion" aria-hidden="true"></span><span class="toggle-label">Onion skin</span>
                 </button>
+                <button id="autoMatchToggle" aria-label="Auto-match" class="toggle" type="button" aria-pressed="true" title="When you place a point, find the same spot in the other photos">
+                  <span class="icon i-wand" aria-hidden="true"></span><span class="toggle-label">Auto-match</span>
+                </button>
                 <button id="centerFocusBtn" aria-label="Centre focus point" class="button button-quiet" type="button" title="Reset this photo's focus to its centre">
                   <span class="icon i-center" aria-hidden="true"></span><span class="toggle-label">Centre</span>
                 </button>
@@ -110,11 +113,12 @@
                 <span class="icon i-chevron-right" aria-hidden="true"></span>
               </button>
               <span id="imageCounter" class="viewer-counter" aria-live="polite"></span>
+              <span id="matchBadge" class="viewer-badge" role="status" hidden></span>
             </div>
             <p id="viewerHint" class="hint">
               <span class="icon i-info" aria-hidden="true"></span>
-              <span>Click the subject that should stay still. <kbd>←</kbd>&nbsp;<kbd>→</kbd> switch photos,
-              <kbd>Shift</kbd>+arrows nudge the point.</span>
+              <span>Click the subject that should stay still. With Auto-match on, the same spot is found in your
+              other photos. <kbd>←</kbd>&nbsp;<kbd>→</kbd> switch photos, <kbd>Shift</kbd>+arrows nudge the point.</span>
             </p>
             <div class="filmstrip-head">
               <h3><span class="icon i-images" aria-hidden="true"></span> Frames <span id="frameCount" class="count-badge">0</span></h3>

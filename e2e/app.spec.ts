@@ -38,11 +38,12 @@ async function generate(page: Page): Promise<Uint8Array> {
   return Uint8Array.from(bytes);
 }
 
-/** Click "Export stills" and return the downloaded file. */
-async function exportStills(page: Page) {
+/** Click "Export stills", check the confirmation and return the downloaded file. */
+async function exportStills(page: Page, message = "Exported") {
   const pending = page.waitForEvent("download");
   await page.locator("#stillsBtn").click();
   const download = await pending;
+  await expect(page.locator(".toast").filter({ hasText: message })).toBeVisible();
   return { filename: download.suggestedFilename(), bytes: new Uint8Array(await readFile(await download.path())) };
 }
 
@@ -204,6 +205,8 @@ test("uploaded photos can be focused, reordered and removed", async ({ page }) =
   const box = (await image.boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.25);
   await expect(page.locator('[data-step="focus"] .step-detail')).toHaveText("1/3");
+  // Flat colours have nothing to match, so auto-match says so and leaves the others alone.
+  await expect(page.locator(".toast").last()).toContainText("isn't enough detail");
   const marker = await page.locator("#selectionMarker").evaluate((el) => [el.style.left, el.style.top]);
   expect(parseFloat(marker[0]!)).toBeCloseTo(25, 0);
   expect(parseFloat(marker[1]!)).toBeCloseTo(25, 0);
@@ -261,7 +264,7 @@ test("stills export as aligned PNGs in a zip, matching the animation", async ({ 
   await page.getByRole("radio", { name: /Layer with transparency/ }).click();
   const animation = inspectAnimation(await generate(page));
 
-  const { filename, bytes } = await exportStills(page);
+  const { filename, bytes } = await exportStills(page, "Exported 3 PNG stills");
   expect(filename).toMatch(/^pikugo-stills-\d{8}-\d{6}\.zip$/);
   const entries = readZip(bytes);
   // One still per photo, in photo order, even though smooth bounce repeats frames.
@@ -270,7 +273,6 @@ test("stills export as aligned PNGs in a zip, matching the animation", async ({ 
     expect(pngSize(entry.data)).toEqual({ width: animation.width, height: animation.height });
   }
   await expect(page.locator("#stillsBtn")).toBeEnabled();
-  await expect(page.locator(".toast").last()).toContainText("Exported 3 PNG stills");
   expect(errors).toEqual([]);
 });
 
@@ -294,10 +296,9 @@ test("stills can be exported as JPEG, flattened onto black where photos don't co
   // Changing the stills format doesn't affect the animation, so the preview badge doesn't appear.
   await expect(page.locator("#previewBadge")).toBeHidden();
 
-  const { bytes } = await exportStills(page);
+  const { bytes } = await exportStills(page, "Exported 3 JPEG stills");
   const entries = readZip(bytes);
   expect(entries.map((entry) => entry.name)).toEqual(["01-sample-1.jpg", "02-sample-2.jpg", "03-sample-3.jpg"]);
-  await expect(page.locator(".toast").last()).toContainText("Exported 3 JPEG stills");
 
   // Decode each JPEG in the browser and look at its corners: in layer mode some are uncovered.
   const corners = await page.evaluate(async (files) => {
@@ -332,4 +333,136 @@ test("stills can be exported as WebP and the format persists", async ({ page }) 
   await page.reload();
   await page.getByRole("button", { name: "Try sample photos" }).click();
   await expect(page.getByRole("radio", { name: "WebP", exact: true })).toHaveAttribute("aria-checked", "true");
+});
+
+/**
+ * Upload three "photos" cut from one cluttered scene at different offsets, as
+ * if the camera moved between shots. Returns each photo's offset in the scene.
+ */
+async function uploadShiftedPhotos(page: Page) {
+  const offsets = [
+    { x: 40, y: 30 },
+    { x: 66, y: 42 },
+    { x: 18, y: 51 },
+  ];
+  const pngs = await page.evaluate(async (cuts) => {
+    let seed = 7;
+    const next = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const world = document.createElement("canvas");
+    world.width = 720;
+    world.height = 560;
+    const scene = world.getContext("2d")!;
+    scene.fillStyle = "#6b8fb5";
+    scene.fillRect(0, 0, 720, 560);
+    for (let n = 0; n < 500; n += 1) {
+      scene.fillStyle = `hsl(${Math.floor(next() * 360)} ${40 + next() * 50}% ${25 + next() * 55}%)`;
+      scene.beginPath();
+      scene.ellipse(next() * 720, next() * 560, 3 + next() * 26, 3 + next() * 26, next() * Math.PI, 0, Math.PI * 2);
+      scene.fill();
+    }
+    return Promise.all(
+      cuts.map(async (cut) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 640;
+        canvas.height = 480;
+        canvas.getContext("2d")!.drawImage(world, -cut.x, -cut.y);
+        const blob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
+        return Array.from(new Uint8Array(await blob.arrayBuffer()));
+      }),
+    );
+  }, offsets);
+  await page.locator("#fileInput").setInputFiles(
+    pngs.map((bytes, index) => ({ name: `shot-${index + 1}.png`, mimeType: "image/png", buffer: Buffer.from(bytes) })),
+  );
+  await expect(page.locator("#filmstrip .film-thumb")).toHaveCount(3);
+  await page.locator("#magnifyToggle").click();
+  return offsets;
+}
+
+/** Click a point (in photo pixels) on the photo shown in the focus editor. */
+async function clickPhoto(page: Page, point: { x: number; y: number }) {
+  const box = (await page.locator("#selectedImage").boundingBox())!;
+  await page.mouse.click(box.x + (point.x / 640) * box.width, box.y + (point.y / 480) * box.height);
+}
+
+/** The shown photo's focus point, in photo pixels. */
+async function shownFocus(page: Page) {
+  const [left, top] = await page.locator("#selectionMarker").evaluate((el) => [el.style.left, el.style.top]);
+  return { x: (parseFloat(left!) / 100) * 640, y: (parseFloat(top!) / 100) * 480 };
+}
+
+async function showPhoto(page: Page, index: number) {
+  await page.locator(".film-thumb").nth(index).click();
+  await expect(page.locator("#imageCounter")).toHaveText(`${index + 1} / 3`);
+}
+
+test("auto-match finds the same spot in the other photos", async ({ page }) => {
+  const errors = trackErrors(page);
+  await page.goto("./");
+  const offsets = await uploadShiftedPhotos(page);
+  const clicked = { x: 330, y: 250 };
+  await clickPhoto(page, clicked);
+
+  // The other two photos are matched automatically.
+  await expect(page.locator('[data-step="focus"] .step-detail')).toHaveText("3/3");
+  await expect(page.locator('.film-item[data-auto="true"]')).toHaveCount(2);
+  for (const index of [1, 2]) {
+    await showPhoto(page, index);
+    const expected = { x: clicked.x + offsets[0]!.x - offsets[index]!.x, y: clicked.y + offsets[0]!.y - offsets[index]!.y };
+    const found = await shownFocus(page);
+    // Clicks land to within a pixel or so on screen; allow a little for that.
+    expect(Math.abs(found.x - expected.x)).toBeLessThanOrEqual(3);
+    expect(Math.abs(found.y - expected.y)).toBeLessThanOrEqual(3);
+    await expect(page.locator("#matchBadge")).toContainText("Auto-matched to photo 1");
+    await expect(page.locator("#selectionMarker")).toHaveClass(/is-auto/);
+  }
+
+  // Adjusting an auto-matched point by hand keeps it from being overwritten later.
+  // It also becomes the point that the remaining auto-matched photo follows.
+  await showPhoto(page, 1);
+  await clickPhoto(page, { x: 100, y: 100 });
+  await expect(page.locator("#matchBadge")).toBeHidden();
+  await expect(page.locator(".film-item").nth(1)).toHaveAttribute("data-auto", "false");
+  await showPhoto(page, 2);
+  await expect(page.locator("#matchBadge")).toContainText("Auto-matched to photo 2");
+  await showPhoto(page, 1);
+  const manual = await shownFocus(page);
+
+  // Placing a new point on photo 1 re-matches photo 3 only.
+  await showPhoto(page, 0);
+  const second = { x: 200, y: 330 };
+  await clickPhoto(page, second);
+  await showPhoto(page, 2);
+  // Wait for the new match (it was previously matched to photo 2).
+  await expect(page.locator("#matchBadge")).toContainText("Auto-matched to photo 1");
+  await expect(page.locator('.film-item[data-auto="true"]')).toHaveCount(1);
+  const third = await shownFocus(page);
+  expect(Math.abs(third.x - (second.x + offsets[0]!.x - offsets[2]!.x))).toBeLessThanOrEqual(3);
+  expect(Math.abs(third.y - (second.y + offsets[0]!.y - offsets[2]!.y))).toBeLessThanOrEqual(3);
+  await showPhoto(page, 1);
+  expect(await shownFocus(page)).toEqual(manual);
+  expect(errors).toEqual([]);
+});
+
+test("auto-match can be turned off, and remembers the choice", async ({ page }) => {
+  await page.goto("./");
+  await uploadShiftedPhotos(page);
+  await page.locator("#autoMatchToggle").click();
+  await expect(page.locator("#autoMatchToggle")).toHaveAttribute("aria-pressed", "false");
+  await clickPhoto(page, { x: 330, y: 250 });
+  await expect(page.locator('[data-step="focus"] .step-detail')).toHaveText("1/3");
+  // Give a match time to (not) happen.
+  await page.waitForTimeout(800);
+  await expect(page.locator('.film-item[data-auto="true"]')).toHaveCount(0);
+
+  // Turning it back on matches the others to the point already placed.
+  await page.locator("#autoMatchToggle").click();
+  await expect(page.locator('.film-item[data-auto="true"]')).toHaveCount(2);
+
+  await page.locator("#autoMatchToggle").click();
+  await page.reload();
+  await expect(page.locator("#autoMatchToggle")).toHaveAttribute("aria-pressed", "false");
 });

@@ -71,6 +71,7 @@ export class Filmstrip {
       const current = index === state.active;
       item.setAttribute("aria-current", String(current));
       item.dataset.focusSet = String(image.focusSet);
+      item.dataset.auto = String(image.autoMatch !== null);
       const dot = item.querySelector<HTMLElement>(".film-dot");
       const thumb = item.querySelector<HTMLImageElement>(".film-thumb img");
       if (dot && thumb) {
@@ -89,7 +90,7 @@ export class Filmstrip {
       const thumbButton = item.querySelector<HTMLButtonElement>(".film-thumb");
       thumbButton?.setAttribute(
         "aria-label",
-        `Frame ${index + 1}: ${image.name}${image.focusSet ? "" : " (focus not set)"}${current ? ", selected" : ""}`,
+        `Frame ${index + 1}: ${image.name}${!image.focusSet ? " (focus not set)" : image.autoMatch ? " (focus auto-matched)" : ""}${current ? ", selected" : ""}`,
       );
       item.querySelector<HTMLButtonElement>(".is-left")!.disabled = index === 0;
       item.querySelector<HTMLButtonElement>(".is-right")!.disabled = index === state.images.length - 1;

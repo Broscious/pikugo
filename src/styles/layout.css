@@ -499,6 +499,41 @@ main {
   opacity: 0.35;
 }
 
+.viewer-badge {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 120px);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(10, 8, 20, 0.72);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.viewer-badge[data-kind="auto"] {
+  background: rgba(109, 74, 255, 0.85);
+}
+
+.viewer-badge .icon {
+  flex: none;
+}
+
+/* Auto-matched point: dashed ring until the user confirms or adjusts it. */
+.selection-marker.is-auto {
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .viewer-counter {
   position: absolute;
   left: 50%;
@@ -601,6 +636,12 @@ main {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
   transform: translate(-50%, -50%);
   pointer-events: none;
+}
+
+/* Auto-matched points: hollow, so hand-placed ones stand out. */
+.film-item[data-auto="true"] .film-dot {
+  background: #fff;
+  border-color: var(--accent);
 }
 
 .film-item[data-focus-set="false"] .film-dot {

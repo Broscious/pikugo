@@ -1,5 +1,5 @@
 import { clamp, type Point } from "../core/geometry";
-import { byId } from "./dom";
+import { byId, h, icon } from "./dom";
 import type { AppState, AppStore, SourceImage } from "./state";
 
 const pct = (value: number, size: number) => `${size > 0 ? (value / size) * 100 : 50}%`;
@@ -7,6 +7,8 @@ const pct = (value: number, size: number) => `${size > 0 ? (value / size) * 100 
 /** Main photo viewer where the user clicks to place each photo's focal point. */
 export class FocusEditor {
   readonly #store: AppStore;
+  readonly #onManualFocus: (id: string) => void;
+  readonly #matchBadge = byId("matchBadge", HTMLSpanElement);
   readonly #container = byId("viewerContainer", HTMLDivElement);
   readonly #stage = byId("imageStage", HTMLDivElement);
   readonly #image = byId("selectedImage", HTMLImageElement);
@@ -23,11 +25,15 @@ export class FocusEditor {
   #onionSkin = false;
   #hover: Point | null = null;
 
-  constructor(store: AppStore) {
+  /** @param onManualFocus called after the user places a photo's focal point by hand. */
+  constructor(store: AppStore, onManualFocus: (id: string) => void = () => {}) {
     this.#store = store;
+    this.#onManualFocus = onManualFocus;
     store.subscribe((state, previous) => {
       if (state.images !== previous.images || state.active !== previous.active) {
         this.#render(state);
+      } else if (state.matching !== previous.matching) {
+        this.#renderMatchBadge(state);
       }
     });
     this.#bind();
@@ -62,8 +68,9 @@ export class FocusEditor {
     }
     const focus = { x: clamp(Math.round(point.x), 0, current.width), y: clamp(Math.round(point.y), 0, current.height) };
     this.#store.set((state) => ({
-      images: state.images.map((image) => (image === current ? { ...image, focus, focusSet: true } : image)),
+      images: state.images.map((image) => (image === current ? { ...image, focus, focusSet: true, autoMatch: null } : image)),
     }));
+    this.#onManualFocus(current.id);
   }
 
   #bind(): void {
@@ -175,11 +182,33 @@ export class FocusEditor {
     this.#image.alt = `${current.name}, photo ${state.active + 1} of ${state.images.length}`;
     this.#marker.style.left = pct(current.focus.x, current.width);
     this.#marker.style.top = pct(current.focus.y, current.height);
+    this.#marker.classList.toggle("is-auto", current.autoMatch !== null);
+    this.#renderMatchBadge(state);
     this.#counter.textContent = `${state.active + 1} / ${state.images.length}`;
     this.#prev.disabled = state.active <= 0;
     this.#next.disabled = state.active >= state.images.length - 1;
     this.#onionToggle.disabled = state.images.length < 2;
     this.#renderOnion();
+  }
+
+  /** Matching progress, or how the current photo's point was found. */
+  #renderMatchBadge(state: AppState): void {
+    const current = state.images[state.active];
+    const badge = this.#matchBadge;
+    if (state.matching) {
+      const { done, total } = state.matching;
+      badge.replaceChildren(h("span", { className: "spinner spinner-sm", "aria-hidden": "true" }), `Matching ${Math.min(done + 1, total)} of ${total}…`);
+      badge.dataset.kind = "busy";
+      badge.hidden = false;
+    } else if (current?.autoMatch) {
+      const reference = state.images.findIndex((image) => image.id === current.autoMatch?.referenceId);
+      const from = reference >= 0 ? ` to photo ${reference + 1}` : "";
+      badge.replaceChildren(icon("wand"), `Auto-matched${from} · ${Math.round(current.autoMatch.score * 100)}% match. Click to adjust.`);
+      badge.dataset.kind = "auto";
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
   }
 
   /**

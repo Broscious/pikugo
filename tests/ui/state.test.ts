@@ -4,7 +4,7 @@ import { describePreview } from "../../src/ui/preview";
 import { createAppStore, effectiveOptions, signatureOf, tryPlan, type SourceImage } from "../../src/ui/state";
 
 function image(id: string, x: number, y: number): SourceImage {
-  return { id, name: `${id}.png`, url: "", bitmap: {} as ImageBitmap, width: 100, height: 80, focus: { x, y }, focusSet: true };
+  return { id, name: `${id}.png`, url: "", bitmap: {} as ImageBitmap, width: 100, height: 80, focus: { x, y }, focusSet: true, autoMatch: null };
 }
 
 describe("tryPlan", () => {

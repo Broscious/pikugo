@@ -3,6 +3,7 @@ import { byId } from "./dom";
 
 const OPTIONS_KEY = "pikugo:options";
 const THEME_KEY = "pikugo:theme";
+const AUTO_MATCH_KEY = "pikugo:auto-match";
 
 /** Storage can be unavailable (private mode, blocked cookies), so every access is guarded. */
 function read(key: string): string | null {
@@ -66,4 +67,13 @@ export function setupThemeToggle(): void {
   });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", sync);
   sync();
+}
+
+/** Whether auto-matching focal points is on (defaults to on). */
+export function loadAutoMatch(): boolean {
+  return read(AUTO_MATCH_KEY) !== "off";
+}
+
+export function saveAutoMatch(enabled: boolean): void {
+  write(AUTO_MATCH_KEY, enabled ? "on" : "off");
 }

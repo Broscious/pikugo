@@ -10,6 +10,10 @@ server: the site is a static bundle hosted on GitHub Pages.
 
 - **Focus editor**: click to set each photo's focal point. Hover to magnify, use onion skin to overlay the
   previous photo under your cursor, and use the keyboard (`←`/`→` to switch photos, `Shift`+arrows to nudge).
+- **Auto-match** (on by default): when you place a point by hand, Pikugo finds the same spot in the other
+  photos. Auto-matched points show a dashed marker and a match score; click to adjust one and it becomes
+  hand-placed, so later matches leave it alone. Photos without a confident match are left for you to set.
+  See [How auto-match works](#how-auto-match-works).
 - **Frame delay**: 20–5000 ms per frame (default 100 ms), with presets, plus **Loop**, **Bounce** (1 2 3 2) or **Smooth bounce** (the default: 1 2 3 3 2 1, holding each end frame at the turnaround so the change of direction feels natural).
 - **Framing options**
   - **Crop to overlap**: keep only the area every photo covers, so frames never show empty corners.
@@ -81,11 +85,15 @@ src/
     webp.ts                RIFF/WebP chunk reader and animated WebP muxer
     format.ts              Display formatting helpers
     zip.ts                 Minimal ZIP writer/reader for the stills export
+    match.ts               Finds a point from one photo in another (auto-match)
   render/
     encode-core.ts         Draw + encode pipeline (animation and stills) shared by worker and main thread
     encode.worker.ts       OffscreenCanvas encoder running in a Web Worker
     encoder.ts             Picks worker or main-thread encoding
     protocol.ts            Worker message types
+    match-core.ts          Pixel reading + matching shared by worker and main thread
+    match.worker.ts        Auto-match running in a Web Worker
+    matcher.ts             Picks worker or main-thread matching; converts to photo pixels
   ui/                      DOM components (focus editor, filmstrip, options, preview, …)
   styles/                  CSS: design tokens (light/dark), components, layout, CSS-drawn art
   assets/icons/            SVG icons, inlined into the CSS bundle as data URIs
@@ -106,6 +114,22 @@ Each photo *i* has size *wᵢ × hᵢ* and focal point *(fxᵢ, fyᵢ)*. Measure
   exactly on an edge would need an infinitely large frame.
 
 Every photo is then drawn so its focal point lands on the frame's shared focal point.
+
+## How auto-match works
+
+When you place a point by hand, every photo you haven't placed by hand is searched for the same spot:
+
+1. Each photo is resized so its longest edge is 1024 px, which puts photos from the same camera at the same
+   scale, and converted to greyscale.
+2. A square patch around your point (about 12% of the photo's shorter side) is compared with every position
+   in the other photo using **normalized cross-correlation**, which ignores differences in brightness and
+   contrast. To keep this fast, the search runs coarse-to-fine: a full scan on a small copy finds a few
+   candidates, which are refined on larger copies, and the best one gets a sub-pixel position.
+3. A match is only used when it scores at least 0.7 (1 is a perfect match) **and** clearly beats every other
+   location, so repetitive patterns and unrelated photos are left for you to set by hand.
+
+Matching runs in a Web Worker, so the page stays responsive. It works best on a distinctive, textured spot;
+it isn't designed for photos that are rotated or zoomed relative to each other.
 
 ## Deployment
 
