@@ -19,18 +19,21 @@ server: the site is a static bundle hosted on GitHub Pages.
   - **Crop to overlap**: keep only the area every photo covers, so frames never show empty corners.
   - **Layer with transparency**: keep every pixel. Areas a photo doesn't cover become transparent.
   - **Aspect ratio**: presets (1:1, 4:5, 4:3, 3:2, 16:9, 9:16) or any custom `W:H` / decimal.
-  - **Focus position**: *Auto* centres the subject as far as the photos allow. *Fixed* pins it to a chosen
-    spot in the frame. The 3×3 grid snaps to the rule-of-thirds guides: corners put the subject where two
+  - **Crop & position**: the frame starts as large as the photos allow, with the subject as close to centre
+    as it can be. The 3×3 grid snaps the subject to the rule-of-thirds guides: corners put it where two
     guide lines cross, edges put it on the middle of one guide line, and the centre keeps it centred.
-    Dragging the frame in the preview allows any position.
+    Dragging the frame in the preview allows any position. *Fill available space* returns to the largest
+    frame.
   - **Frame size**: the frame is as large as the photos allow unless you resize it, either with the W/H
     sliders (in photo pixels) or by dragging one of its edges or corners in the preview. Both resize about
     the focus point, so the subject keeps its place in the frame. A resized frame can then be moved anywhere without touching an edge.
     With a *Free* aspect ratio, a side moves on its own and a corner moves its two sides. With a fixed ratio,
     the whole frame scales about the focus point, so every edge moves and the subject keeps the same
-    relative position in the frame. *Fill available space* returns to the largest frame.
+    relative position in the frame.
 - **Live preview**: an animated canvas showing the output frame, the area all photos share, each photo's
-  edges and the cropped-away parts. Hovering or focusing any option previews it before you apply it.
+  edges and the cropped-away parts. *Grid* overlays rule-of-thirds composition lines (on by default),
+  *Outlines* toggles the photo edges and shared area, and *Show cropped* toggles the cropped-away parts.
+  Hovering or focusing any option previews it before you apply it.
 - **Output**: longest-edge limit and quality, with the size, duration and coverage shown before encoding.
 - **Export stills**: download every photo as its own image, aligned and framed exactly as it appears in the
   animation (same size and crop). Several photos come as a `.zip` with files numbered in photo order

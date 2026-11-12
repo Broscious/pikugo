@@ -139,8 +139,11 @@
                 <button id="stepBtn" class="toggle" type="button" aria-label="Next frame">
                   <span class="icon i-step" aria-hidden="true"></span>
                 </button>
-                <button id="guidesToggle" aria-label="Guides" class="toggle" type="button" aria-pressed="true">
-                  <span class="icon i-grid" aria-hidden="true"></span><span class="toggle-label">Guides</span>
+                <button id="compositionToggle" aria-label="Composition grid" class="toggle" type="button" aria-pressed="true" title="Show rule-of-thirds lines in the frame">
+                  <span class="icon i-grid" aria-hidden="true"></span><span class="toggle-label">Grid</span>
+                </button>
+                <button id="guidesToggle" aria-label="Photo outlines" class="toggle" type="button" aria-pressed="true" title="Show each photo's edges and the area they all share">
+                  <span class="icon i-layers" aria-hidden="true"></span><span class="toggle-label">Outlines</span>
                 </button>
                 <button id="ghostToggle" aria-label="Show cropped areas" class="toggle" type="button" aria-pressed="true" title="Show the parts of each photo that get cropped away">
                   <span class="icon i-crop" aria-hidden="true"></span><span class="toggle-label">Show cropped</span>
@@ -159,7 +162,7 @@
                 <li><span class="swatch swatch-bounds"></span>Photo edges</li>
                 <li><span class="swatch swatch-empty"></span>Transparent</li>
               </ul>
-              <p class="hint hint-tight"><span class="icon i-info" aria-hidden="true"></span><span>Drag the frame to pin where the subject sits. Hover any option to preview it.</span></p>
+              <p class="hint hint-tight"><span class="icon i-info" aria-hidden="true"></span><span>Drag the frame to move it, or its edges and corners to resize it. Hover any option to preview it.</span></p>
             </div>
             <dl id="summary" class="summary"></dl>
             <div class="generate-row">
@@ -258,23 +261,22 @@
               </div>
             </div>
             <div class="field">
-              <span class="field-label" id="anchorLabel"><span class="icon i-target" aria-hidden="true"></span> Focus position in frame</span>
-              <div class="segmented" role="radiogroup" aria-labelledby="anchorLabel" data-option="anchorMode">
-                <button type="button" role="radio" data-value="auto">Auto</button>
-                <button type="button" role="radio" data-value="fixed">Fixed</button>
-              </div>
+              <span class="field-label" id="anchorLabel"><span class="icon i-crop" aria-hidden="true"></span> Crop &amp; position</span>
               <div id="anchorControls" class="anchor-controls">
-                <div id="anchorGrid" class="anchor-grid" role="group" aria-label="Snap focus to a position"></div>
+                <div class="anchor-picker">
+                  <div id="anchorGrid" class="anchor-grid" role="group" aria-labelledby="anchorGridLabel"></div>
+                  <span id="anchorGridLabel" class="anchor-caption">Snap to guide</span>
+                </div>
                 <div id="frameSize" class="anchor-sliders frame-size" role="group" aria-label="Frame size" data-locked="false">
                   <label class="slider-row"><span title="Width">W</span><input id="frameWidth" class="range" type="range" min="0" max="100" step="1" aria-label="Frame width" /><output id="frameWidthOut"></output></label>
                   <label class="slider-row"><span title="Height">H</span><input id="frameHeight" class="range" type="range" min="0" max="100" step="1" aria-label="Frame height" /><output id="frameHeightOut"></output></label>
                   <span id="frameSizeLock" class="size-lock" role="img"><span class="icon i-unlink" aria-hidden="true"></span></span>
                 </div>
               </div>
-              <button id="fillFrameBtn" class="button button-quiet fill-frame" type="button" hidden>
+              <button id="fillFrameBtn" class="button button-quiet fill-frame" type="button">
                 <span class="icon i-resize" aria-hidden="true"></span> Fill available space
               </button>
-              <p class="field-hint">Auto centres the subject as far as the photos allow. Fixed keeps it at the same spot in the frame. W and H set the frame size in photo pixels, keeping the subject in the same place within it. In the preview, drag the frame to move it, or drag an edge or corner to resize it.</p>
+              <p class="field-hint">Snap the subject to a guide, set W and H, or drag the frame in the preview. Edges and corners resize it.</p>
             </div>
           </fieldset>
 

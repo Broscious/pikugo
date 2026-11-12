@@ -91,11 +91,8 @@ export function describePreview(patch: Partial<AnimationOptions>): string {
   if (patch.aspect !== undefined) {
     return patch.aspect === "free" ? "Free aspect ratio" : `Aspect ${patch.aspect}`;
   }
-  if ("frameSize" in patch && !("anchor" in patch)) {
-    return "Fill available space";
-  }
   if ("anchor" in patch) {
-    return patch.anchor ? `Focus at ${Math.round(patch.anchor.x * 100)}%, ${Math.round(patch.anchor.y * 100)}%` : "Automatic focus position";
+    return patch.anchor ? `Subject at ${Math.round(patch.anchor.x * 100)}%, ${Math.round(patch.anchor.y * 100)}%` : "Fill available space";
   }
   if (patch.frameDelay !== undefined) {
     return `${patch.frameDelay} ms per frame`;
@@ -124,11 +121,15 @@ export class Preview {
   readonly #playToggle = byId("playToggle", HTMLButtonElement);
   readonly #stepButton = byId("stepBtn", HTMLButtonElement);
   readonly #guidesToggle = byId("guidesToggle", HTMLButtonElement);
+  readonly #compositionToggle = byId("compositionToggle", HTMLButtonElement);
   readonly #ghostToggle = byId("ghostToggle", HTMLButtonElement);
   readonly #context: CanvasRenderingContext2D | null;
 
   #playing = !prefersReducedMotion();
+  /** Photo outlines and the shared area. */
   #guides = true;
+  /** Rule-of-thirds lines in the output frame. */
+  #composition = true;
   #ghost = true;
   #step = 0;
   #lastSwitch = 0;
@@ -187,6 +188,11 @@ export class Preview {
     this.#stepButton.addEventListener("click", () => {
       this.#playing = false;
       this.#step += 1;
+      this.#dirty = true;
+      this.#syncToggles();
+    });
+    this.#compositionToggle.addEventListener("click", () => {
+      this.#composition = !this.#composition;
       this.#dirty = true;
       this.#syncToggles();
     });
@@ -251,6 +257,7 @@ export class Preview {
     this.#playToggle.querySelector(".icon")?.classList.toggle("i-pause", this.#playing);
     this.#playToggle.querySelector(".icon")?.classList.toggle("i-play", !this.#playing);
     this.#guidesToggle.setAttribute("aria-pressed", String(this.#guides));
+    this.#compositionToggle.setAttribute("aria-pressed", String(this.#composition));
     this.#ghostToggle.setAttribute("aria-pressed", String(this.#ghost));
   }
 
@@ -552,8 +559,11 @@ export class Preview {
       }
     }
 
+    if (this.#composition) {
+      this.#drawThirds(context, frame);
+    }
     if (this.#guides) {
-      this.#drawGuides(context, state, plan.layout.intersection, plan.layout.focus, frame, index, photoRect, theme);
+      this.#drawGuides(context, state, plan.layout.intersection, plan.layout.focus, index, photoRect, theme);
     }
 
     // Frame outline with corner handles.
@@ -598,12 +608,32 @@ export class Preview {
     }
   }
 
+  /** Rule-of-thirds composition lines across the output frame. */
+  #drawThirds(context: CanvasRenderingContext2D, frame: Rect): void {
+    context.save();
+    context.lineWidth = 1;
+    // A dark line under a light one keeps the grid visible over bright and dark photos alike.
+    for (const [style, offset] of [["rgba(0, 0, 0, 0.25)", 1], ["rgba(255, 255, 255, 0.6)", 0]] as const) {
+      context.strokeStyle = style;
+      context.beginPath();
+      for (const t of [1 / 3, 2 / 3]) {
+        const x = Math.round(frame.x + frame.width * t) + 0.5 + offset;
+        const y = Math.round(frame.y + frame.height * t) + 0.5 + offset;
+        context.moveTo(x, frame.y);
+        context.lineTo(x, frame.y + frame.height);
+        context.moveTo(frame.x, y);
+        context.lineTo(frame.x + frame.width, y);
+      }
+      context.stroke();
+    }
+    context.restore();
+  }
+
   #drawGuides(
     context: CanvasRenderingContext2D,
     state: AppState,
     intersection: Rect,
     focus: Point,
-    frame: Rect,
     currentIndex: number,
     photoRect: (index: number) => Rect | null,
     theme: Theme,
@@ -628,20 +658,6 @@ export class Preview {
       context.strokeRect(shared.x, shared.y, shared.width, shared.height);
     }
 
-    // Rule-of-thirds lines help when pinning the subject.
-    if (this.#store.state.options.anchor) {
-      context.setLineDash([]);
-      context.lineWidth = 1;
-      context.strokeStyle = "rgba(255, 255, 255, 0.35)";
-      for (const t of [1 / 3, 2 / 3]) {
-        context.beginPath();
-        context.moveTo(frame.x + frame.width * t, frame.y);
-        context.lineTo(frame.x + frame.width * t, frame.y + frame.height);
-        context.moveTo(frame.x, frame.y + frame.height * t);
-        context.lineTo(frame.x + frame.width, frame.y + frame.height * t);
-        context.stroke();
-      }
-    }
     context.restore();
 
     // Shared focal point.

@@ -553,11 +553,20 @@
   gap: 14px;
   align-items: center;
   margin-top: 12px;
-  transition: opacity 0.2s;
 }
 
-.anchor-controls[data-disabled="true"] {
-  opacity: 0.45;
+.anchor-picker {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.anchor-caption {
+  color: var(--text-faint);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .anchor-grid {

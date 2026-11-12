@@ -62,7 +62,6 @@ export class OptionsPanel {
   readonly #delayPresets = byId("delayPresets", HTMLDivElement);
   readonly #aspectPresets = byId("aspectPresets", HTMLDivElement);
   readonly #aspectCustom = byId("aspectCustom", HTMLInputElement);
-  readonly #anchorControls = byId("anchorControls", HTMLDivElement);
   readonly #anchorGrid = byId("anchorGrid", HTMLDivElement);
   readonly #frameWidth = byId("frameWidth", HTMLInputElement);
   readonly #frameHeight = byId("frameHeight", HTMLInputElement);
@@ -82,8 +81,6 @@ export class OptionsPanel {
   /** Highlighted position in the frame order row, or null while it isn't animating. */
   #orderStep: number | null = null;
   #orderTimer: ReturnType<typeof setInterval> | undefined;
-  /** Last fixed anchor, restored when switching back from Auto. */
-  #lastAnchor: Point = { x: 0.5, y: 0.5 };
 
   constructor(store: AppStore) {
     this.#store = store;
@@ -145,9 +142,6 @@ export class OptionsPanel {
   }
 
   update(patch: OptionPatch): void {
-    if (patch.anchor) {
-      this.#lastAnchor = patch.anchor;
-    }
     this.#store.set((state) => ({ options: { ...state.options, ...patch }, hoverOptions: null }));
   }
 
@@ -195,17 +189,6 @@ export class OptionsPanel {
     return plan ? frameGeometry(plan.layout, options.edges, parseAspectRatio(options.aspect) ?? null) : null;
   }
 
-  /** Anchor matching the current automatic layout, so switching to Fixed doesn't jump. */
-  #currentAnchor(): Point {
-    const { images, options } = this.#store.state;
-    const { plan } = tryPlan(images, options);
-    if (!plan) {
-      return this.#lastAnchor;
-    }
-    const { focus, width, height } = plan.layout;
-    return { x: Math.round((focus.x / width) * 100) / 100, y: Math.round((focus.y / height) * 100) / 100 };
-  }
-
   /** Map a radio button to the options it represents. */
   #patchFor(option: string, value: string): OptionPatch {
     switch (option) {
@@ -219,9 +202,6 @@ export class OptionsPanel {
         return { maxEdge: value === "original" ? null : Number(value) };
       case "stillFormat":
         return { stillFormat: parseStillFormat(value) };
-      case "anchorMode":
-        // Auto always uses the largest frame, so it drops any size set by hand.
-        return value === "fixed" ? { anchor: this.#store.state.options.anchor ?? this.#currentAnchor() } : { anchor: null, frameSize: null };
       default:
         return {};
     }
@@ -242,7 +222,7 @@ export class OptionsPanel {
     }
     ANCHOR_POINTS.forEach((point, index) => {
       this.#anchorGrid.append(
-        h("button", { type: "button", "aria-label": ANCHOR_NAMES[index], title: ANCHOR_NAMES[index], "data-x": point.x, "data-y": point.y }),
+        h("button", { type: "button", "aria-label": ANCHOR_NAMES[index], "data-x": point.x, "data-y": point.y, "data-name": ANCHOR_NAMES[index] }),
       );
     });
   }
@@ -328,8 +308,9 @@ export class OptionsPanel {
     this.#frameWidth.addEventListener("input", () => setSize({ width: Number(this.#frameWidth.value) }));
     this.#frameHeight.addEventListener("input", () => setSize({ height: Number(this.#frameHeight.value) }));
 
-    this.#fillFrame.addEventListener("click", () => this.update({ frameSize: null }));
-    this.#previewOnHover(this.#fillFrame, () => ({ frameSize: null }));
+    // Back to the largest frame the photos allow, with the subject as close to centre as it can be.
+    this.#fillFrame.addEventListener("click", () => this.update({ anchor: null, frameSize: null }));
+    this.#previewOnHover(this.#fillFrame, () => ({ anchor: null, frameSize: null }));
 
     this.#quality.addEventListener("input", () => this.update({ quality: Number(this.#quality.value) / 100 }));
     byId("resetOptionsBtn", HTMLButtonElement).addEventListener("click", () => {
@@ -381,7 +362,6 @@ export class OptionsPanel {
 
   #render(state: AppState): void {
     const { options } = state;
-    const anchorMode = options.anchor ? "fixed" : "auto";
     const sizeValue = options.maxEdge === null ? "original" : String(options.maxEdge);
     const presetAspect = ASPECT_PRESETS.some((preset) => preset.value === options.aspect);
 
@@ -392,7 +372,6 @@ export class OptionsPanel {
         : option === "edges" ? options.edges
         : option === "aspect" ? options.aspect
         : option === "maxEdge" ? sizeValue
-        : option === "anchorMode" ? anchorMode
         : option === "stillFormat" ? options.stillFormat
         : undefined;
       for (const button of group.querySelectorAll<HTMLButtonElement>("[role=radio]")) {
@@ -418,15 +397,15 @@ export class OptionsPanel {
     const loopLength = frameSequence(Math.max(2, state.images.length), options.playback).length * options.frameDelay;
     this.#delayHint.textContent = `${formatFps(options.frameDelay)} · ${formatMilliseconds(loopLength)} per loop`;
 
-    this.#anchorControls.dataset.disabled = String(options.anchor === null);
-    // Shown whenever the framing is fixed; it only has work to do once the frame has been resized.
-    this.#fillFrame.hidden = options.anchor === null;
-    this.#fillFrame.disabled = options.frameSize === null;
-    this.#fillFrame.title = options.frameSize === null ? "The frame already fills the available space" : "Make the frame as large as the photos allow";
+    // With no position or size set, the frame is already as large as it can be.
+    const filled = options.anchor === null;
+    this.#fillFrame.disabled = filled;
+    this.#fillFrame.title = filled ? "The frame already fills the available space" : "Make the frame as large as the photos allow";
     this.#renderFrameSize();
     for (const button of this.#anchorGrid.querySelectorAll<HTMLButtonElement>("button")) {
       const pressed = options.anchor !== null && Number(button.dataset.x) === options.anchor.x && Number(button.dataset.y) === options.anchor.y;
       button.setAttribute("aria-pressed", String(pressed));
+      button.title = `Place the subject on the ${(button.dataset.name ?? "").toLowerCase()}`;
     }
 
     setRange(this.#quality, Math.round(options.quality * 100));

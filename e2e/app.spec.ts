@@ -158,14 +158,15 @@ test("layer mode keeps every pixel and writes transparency", async ({ page }) =>
   await expect(page.locator("#staleBadge")).toBeHidden();
 });
 
-test("fixed focus position changes the framing", async ({ page }) => {
+test("snapping the subject to a guide changes the framing", async ({ page }) => {
   await loadSamples(page);
   const auto = inspectAnimation(await generate(page));
-  await expect(page.locator("#fillFrameBtn")).toBeHidden();
-  await page.getByRole("radio", { name: "Fixed" }).click();
-  // Grid corners snap to where the rule-of-thirds lines cross.
+  // The frame starts as large as it can be, so there's nothing to fill yet.
   await expect(page.locator("#fillFrameBtn")).toBeVisible();
   await expect(page.locator("#fillFrameBtn")).toBeDisabled();
+  await expect(page.getByRole("group", { name: "Snap to guide" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Centre", exact: true })).toHaveAttribute("title", "Place the subject on the centre");
+  // Grid corners snap to where the rule-of-thirds lines cross.
   await page.getByRole("button", { name: "Top left intersection" }).click();
   await expect(page.getByRole("button", { name: "Top left intersection" })).toHaveAttribute("aria-pressed", "true");
   const info = inspectAnimation(await generate(page));
@@ -177,6 +178,13 @@ test("fixed focus position changes the framing", async ({ page }) => {
   await page.getByRole("button", { name: "Right line" }).click();
   await expect(page.getByRole("button", { name: "Right line" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "Top left intersection" })).toHaveAttribute("aria-pressed", "false");
+
+  // Filling goes back to the largest frame.
+  await expect(page.locator("#fillFrameBtn")).toBeEnabled();
+  await page.locator("#fillFrameBtn").click();
+  await expect(page.locator("#fillFrameBtn")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Right line" })).toHaveAttribute("aria-pressed", "false");
+  expect(inspectAnimation(await generate(page))).toMatchObject({ width: auto.width, height: auto.height });
 });
 
 test("the width and height sliders resize the frame about the subject", async ({ page }) => {
@@ -188,10 +196,10 @@ test("the width and height sliders resize the frame about the subject", async ({
   await expect(page.locator("#frameWidthOut")).toHaveText(`${full.width} px`);
   await expect(page.locator("#frameHeightOut")).toHaveText(`${full.height} px`);
 
-  // Free aspect ratio: width changes on its own, and resizing pins the framing.
+  // Free aspect ratio: width changes on its own.
   await expect(page.locator("#frameSize")).toHaveAttribute("data-locked", "false");
   await width.fill("400");
-  await expect(page.getByRole("radio", { name: "Fixed" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#fillFrameBtn")).toBeEnabled();
   await expect(page.locator("#frameWidthOut")).toHaveText("400 px");
   expect(inspectAnimation(await generate(page))).toMatchObject({ width: 400, height: full.height });
 
@@ -205,7 +213,20 @@ test("the width and height sliders resize the frame about the subject", async ({
   expect(inspectAnimation(await generate(page))).toMatchObject({ width: 300, height: 300 });
 });
 
-test("dragging the preview frame pins the focus position", async ({ page }) => {
+test("the composition grid and photo outlines toggle separately, both on by default", async ({ page }) => {
+  await loadSamples(page);
+  const grid = page.getByRole("button", { name: "Composition grid" });
+  const outlines = page.getByRole("button", { name: "Photo outlines" });
+  await expect(grid).toHaveAttribute("aria-pressed", "true");
+  await expect(outlines).toHaveAttribute("aria-pressed", "true");
+  await grid.click();
+  await expect(grid).toHaveAttribute("aria-pressed", "false");
+  await expect(outlines).toHaveAttribute("aria-pressed", "true");
+  await outlines.click();
+  await expect(outlines).toHaveAttribute("aria-pressed", "false");
+});
+
+test("dragging the preview frame moves the subject", async ({ page }) => {
   await loadSamples(page);
   await page.getByRole("button", { name: "Pause preview" }).click();
   const canvas = page.locator("#previewCanvas");
@@ -215,7 +236,7 @@ test("dragging the preview frame pins the focus position", async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(centre.x + 40, centre.y + 20, { steps: 5 });
   await page.mouse.up();
-  await expect(page.getByRole("radio", { name: "Fixed" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#fillFrameBtn")).toBeEnabled();
 });
 
 /** Walk the pointer from `from` in steps of `step` until the preview shows `cursor`, and return that point. */
@@ -254,7 +275,6 @@ test("the preview frame can be resized by its edges and moved without touching a
   // Free aspect ratio: dragging the right edge in narrows the frame and leaves its height alone.
   const right = await findCursor(page, centre, { x: 2, y: 0 }, "ew-resize");
   await drag(page, right, { x: -60, y: 0 });
-  await expect(page.getByRole("radio", { name: "Fixed" })).toHaveAttribute("aria-checked", "true");
   await expect(page.locator("#fillFrameBtn")).toBeEnabled();
   const narrowed = inspectAnimation(await generate(page));
   expect(narrowed.width).toBeLessThan(full.width - 20);
@@ -289,14 +309,8 @@ test("the preview frame can be resized by its edges and moved without touching a
   // "Fill available space" goes back to the largest frame.
   await page.getByRole("radio", { name: "Free" }).click();
   await page.locator("#fillFrameBtn").click();
-  // Still shown while the framing is fixed, but there's nothing more to fill.
-  await expect(page.locator("#fillFrameBtn")).toBeVisible();
   await expect(page.locator("#fillFrameBtn")).toBeDisabled();
-  const filled = inspectAnimation(await generate(page));
-  // The largest frame for where the subject now sits: at least as big as before, and bigger overall.
-  expect(filled.width).toBeGreaterThanOrEqual(smaller.width);
-  expect(filled.height).toBeGreaterThanOrEqual(smaller.height);
-  expect(filled.width * filled.height).toBeGreaterThan(smaller.width * smaller.height);
+  expect(inspectAnimation(await generate(page))).toMatchObject({ width: full.width, height: full.height });
 });
 
 test("hovering an option previews it without applying it", async ({ page }) => {
