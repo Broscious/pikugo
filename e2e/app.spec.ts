@@ -164,8 +164,6 @@ test("fixed focus position changes the framing", async ({ page }) => {
   await page.getByRole("radio", { name: "Fixed" }).click();
   // Grid corners snap to where the rule-of-thirds lines cross.
   await page.getByRole("button", { name: "Top left intersection" }).click();
-  await expect(page.locator("#anchorXOut")).toHaveText("33%");
-  await expect(page.locator("#anchorYOut")).toHaveText("33%");
   await expect(page.getByRole("button", { name: "Top left intersection" })).toHaveAttribute("aria-pressed", "true");
   const info = inspectAnimation(await generate(page));
   // Pinning the subject off-centre leaves less usable space than the automatic framing.
@@ -174,8 +172,34 @@ test("fixed focus position changes the framing", async ({ page }) => {
 
   // Edge buttons snap to the middle of a single guide line.
   await page.getByRole("button", { name: "Right line" }).click();
-  await expect(page.locator("#anchorXOut")).toHaveText("67%");
-  await expect(page.locator("#anchorYOut")).toHaveText("50%");
+  await expect(page.getByRole("button", { name: "Right line" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Top left intersection" })).toHaveAttribute("aria-pressed", "false");
+});
+
+test("the width and height sliders resize the frame about the subject", async ({ page }) => {
+  await loadSamples(page);
+  const full = inspectAnimation(await generate(page));
+  const width = page.locator("#frameWidth");
+  const height = page.locator("#frameHeight");
+  // The sliders start at the full frame size, in photo pixels.
+  await expect(page.locator("#frameWidthOut")).toHaveText(`${full.width} px`);
+  await expect(page.locator("#frameHeightOut")).toHaveText(`${full.height} px`);
+
+  // Free aspect ratio: width changes on its own, and resizing pins the framing.
+  await expect(page.locator("#frameSize")).toHaveAttribute("data-locked", "false");
+  await width.fill("400");
+  await expect(page.getByRole("radio", { name: "Fixed" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#frameWidthOut")).toHaveText("400 px");
+  expect(inspectAnimation(await generate(page))).toMatchObject({ width: 400, height: full.height });
+
+  // With an aspect ratio, setting one dimension sets the other to match.
+  await page.getByRole("radio", { name: "1:1" }).click();
+  await expect(page.locator("#frameSize")).toHaveAttribute("data-locked", "true");
+  await expect(page.locator("#frameSizeLock")).toHaveAttribute("aria-label", "Width and height are locked to the 1:1 aspect ratio");
+  await height.fill("300");
+  await expect(page.locator("#frameWidthOut")).toHaveText("300 px");
+  await expect(page.locator("#frameHeightOut")).toHaveText("300 px");
+  expect(inspectAnimation(await generate(page))).toMatchObject({ width: 300, height: 300 });
 });
 
 test("dragging the preview frame pins the focus position", async ({ page }) => {

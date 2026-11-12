@@ -21,10 +21,11 @@ server: the site is a static bundle hosted on GitHub Pages.
   - **Aspect ratio**: presets (1:1, 4:5, 4:3, 3:2, 16:9, 9:16) or any custom `W:H` / decimal.
   - **Focus position**: *Auto* centres the subject as far as the photos allow. *Fixed* pins it to a chosen
     spot in the frame. The 3×3 grid snaps to the rule-of-thirds guides: corners put the subject where two
-    guide lines cross, edges put it on the middle of one guide line, and the centre keeps it centred. X/Y
-    sliders and dragging the frame in the preview allow any position.
-  - **Frame size**: the frame is as large as the photos allow unless you resize it by dragging one of its
-    edges or corners in the preview. A resized frame can then be moved anywhere without touching an edge.
+    guide lines cross, edges put it on the middle of one guide line, and the centre keeps it centred.
+    Dragging the frame in the preview allows any position.
+  - **Frame size**: the frame is as large as the photos allow unless you resize it, either with the W/H
+    sliders (in photo pixels) or by dragging one of its edges or corners in the preview. Both resize about
+    the focus point, so the subject keeps its place in the frame. A resized frame can then be moved anywhere without touching an edge.
     With a *Free* aspect ratio, a side moves on its own and a corner moves its two sides. With a fixed ratio,
     the whole frame scales about the focus point, so every edge moves and the subject keeps the same
     relative position in the frame. *Fill available space* returns to the largest frame.

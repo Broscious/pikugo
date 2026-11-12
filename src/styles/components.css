@@ -622,9 +622,73 @@
   gap: 4px;
 }
 
+/* W and H with a bracket beside them showing whether they're linked by the aspect ratio. */
+.frame-size {
+  grid-template-columns: 1fr auto;
+  column-gap: 2px;
+}
+
+.frame-size .slider-row {
+  grid-column: 1;
+}
+
+.size-lock {
+  position: relative;
+  display: grid;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  place-items: center;
+  width: 22px;
+  color: var(--text-faint);
+  transition: color 0.15s;
+}
+
+/* The bracket: short arms reaching towards each value, above and below the icon. */
+.size-lock::before,
+.size-lock::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  width: 7px;
+  height: calc(50% - 14px);
+  border: 1.5px solid currentColor;
+  border-left: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.size-lock::before {
+  top: 9px;
+  border-bottom: 0;
+  border-top-right-radius: 4px;
+}
+
+.size-lock::after {
+  bottom: 9px;
+  border-top: 0;
+  border-bottom-right-radius: 4px;
+}
+
+.frame-size[data-locked="true"] .size-lock {
+  color: var(--accent);
+}
+
+.frame-size[data-locked="true"] .size-lock::before,
+.frame-size[data-locked="true"] .size-lock::after {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .size-lock,
+  .size-lock::before,
+  .size-lock::after {
+    transition: none;
+  }
+}
+
 .slider-row {
   display: grid;
-  grid-template-columns: 14px 1fr 40px;
+  grid-template-columns: 14px 1fr 52px;
   align-items: center;
   gap: 8px;
   font-size: 0.8rem;

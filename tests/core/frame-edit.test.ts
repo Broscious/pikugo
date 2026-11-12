@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { framingOf, MIN_FRAME_SIZE, moveFrame, resizeFrame, unionRect } from "../../src/core/frame-edit";
+import { frameGeometry, frameSizeLimits, framingOf, MIN_FRAME_SIZE, moveFrame, resizeFrame, setFrameSize, unionRect } from "../../src/core/frame-edit";
+import type { FrameLayout } from "../../src/core/geometry";
 
 // Focus space: the focal point is the origin.
 const start = { x: -100, y: -50, width: 200, height: 100 };
@@ -65,6 +66,57 @@ describe("resizeFrame with a fixed aspect ratio", () => {
     const onEdge = { x: -200, y: -50, width: 200, height: 100 };
     const wide = { x: -300, y: -100, width: 550, height: 300 };
     expect(resizeFrame(onEdge, { x: 1, y: 0 }, { x: 20, y: 0 }, wide, 2)).toEqual({ x: -220, y: -55, width: 220, height: 110 });
+  });
+});
+
+describe("setFrameSize", () => {
+  it("without an aspect ratio, scales one dimension about the focal point", () => {
+    const geometry = { frame: start, bounds, ratio: null };
+    expect(setFrameSize(geometry, { width: 100 })).toEqual({ x: -50, y: -50, width: 100, height: 100 });
+    expect(setFrameSize(geometry, { height: 60 })).toEqual({ x: -100, y: -30, width: 200, height: 60 });
+  });
+
+  it("with an aspect ratio, moves every edge and keeps the focal point's relative position", () => {
+    // The focal point is a quarter of the way across and down.
+    const offCentre = { x: -50, y: -25, width: 200, height: 100 };
+    const geometry = { frame: offCentre, bounds, ratio: 2 };
+    expect(setFrameSize(geometry, { width: 300 })).toEqual({ x: -75, y: -37.5, width: 300, height: 150 });
+    expect(setFrameSize(geometry, { height: 50 })).toEqual({ x: -25, y: -12.5, width: 100, height: 50 });
+  });
+
+  it("keeps within the limits", () => {
+    const geometry = { frame: start, bounds, ratio: 2 };
+    expect(setFrameSize(geometry, { width: 9999 })).toEqual({ x: -150, y: -75, width: 300, height: 150 });
+    expect(setFrameSize(geometry, { width: 1 })).toEqual({ x: -32, y: -16, width: 64, height: 32 });
+  });
+});
+
+describe("frameSizeLimits", () => {
+  it("allows each dimension up to the bounds, scaling about the focal point", () => {
+    // Centred: 150 to the left bound and 250 to the right, so at most 300 wide; 100 above and 200 below, so 200 high.
+    expect(frameSizeLimits({ frame: start, bounds, ratio: null })).toEqual({ width: [MIN_FRAME_SIZE, 300], height: [MIN_FRAME_SIZE, 200] });
+  });
+
+  it("ties the dimensions together with an aspect ratio", () => {
+    expect(frameSizeLimits({ frame: start, bounds, ratio: 2 })).toEqual({ width: [64, 300], height: [32, 150] });
+  });
+});
+
+describe("frameGeometry", () => {
+  const layout = {
+    width: 200,
+    height: 100,
+    focus: { x: 100, y: 50 },
+    intersection: { x: 50, y: 0, width: 200, height: 100 },
+    union: { x: 0, y: -20, width: 300, height: 160 },
+  } as FrameLayout;
+
+  it("keeps a cropped frame within the photos' overlap", () => {
+    expect(frameGeometry(layout, "crop", 1)).toEqual({ frame: start, bounds: { x: -100, y: -50, width: 250, height: 100 }, ratio: 1 });
+  });
+
+  it("lets a layered frame cover any photo", () => {
+    expect(frameGeometry(layout, "layer", null).bounds).toEqual({ x: -100, y: -70, width: 300, height: 160 });
   });
 });
 

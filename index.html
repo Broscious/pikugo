@@ -265,15 +265,16 @@
               </div>
               <div id="anchorControls" class="anchor-controls">
                 <div id="anchorGrid" class="anchor-grid" role="group" aria-label="Snap focus to a position"></div>
-                <div class="anchor-sliders">
-                  <label class="slider-row"><span>X</span><input id="anchorX" class="range" type="range" min="0" max="100" step="1" /><output id="anchorXOut"></output></label>
-                  <label class="slider-row"><span>Y</span><input id="anchorY" class="range" type="range" min="0" max="100" step="1" /><output id="anchorYOut"></output></label>
+                <div id="frameSize" class="anchor-sliders frame-size" role="group" aria-label="Frame size" data-locked="false">
+                  <label class="slider-row"><span title="Width">W</span><input id="frameWidth" class="range" type="range" min="0" max="100" step="1" aria-label="Frame width" /><output id="frameWidthOut"></output></label>
+                  <label class="slider-row"><span title="Height">H</span><input id="frameHeight" class="range" type="range" min="0" max="100" step="1" aria-label="Frame height" /><output id="frameHeightOut"></output></label>
+                  <span id="frameSizeLock" class="size-lock" role="img"><span class="icon i-unlink" aria-hidden="true"></span></span>
                 </div>
               </div>
               <button id="fillFrameBtn" class="button button-quiet fill-frame" type="button" hidden>
                 <span class="icon i-resize" aria-hidden="true"></span> Fill available space
               </button>
-              <p class="field-hint">Auto centres the subject as far as the photos allow. Fixed keeps it at the same spot in the frame. In the preview, drag the frame to move it, or drag an edge or corner to resize it.</p>
+              <p class="field-hint">Auto centres the subject as far as the photos allow. Fixed keeps it at the same spot in the frame. W and H set the frame size in photo pixels, keeping the subject in the same place within it. In the preview, drag the frame to move it, or drag an edge or corner to resize it.</p>
             </div>
           </fieldset>
 

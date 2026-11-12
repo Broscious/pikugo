@@ -1,4 +1,4 @@
-import { framingOf, moveFrame, resizeFrame, unionRect, type Handle } from "../core/frame-edit";
+import { frameGeometry, framingOf, moveFrame, resizeFrame, type FrameGeometry, type Handle } from "../core/frame-edit";
 import type { Point, Rect } from "../core/geometry";
 import { PLAYBACK_LABELS, layoutOptionsFrom, type AnimationOptions } from "../core/options";
 import { byId, prefersReducedMotion } from "./dom";
@@ -21,13 +21,6 @@ interface View {
 
 /** Changes to the framing made in the preview. */
 export type FramingPatch = Pick<AnimationOptions, "anchor"> & Partial<Pick<AnimationOptions, "frameSize">>;
-
-/** The output frame and the area it may cover, in focus space. */
-interface FrameGeometry {
-  frame: Rect;
-  bounds: Rect;
-  ratio: number | null;
-}
 
 interface Drag {
   pointerId: number;
@@ -289,13 +282,8 @@ export class Preview {
     if (!plan) {
       return null;
     }
-    const { layout } = plan;
     const options = effectiveOptions(this.#store.state);
-    const frame: Rect = { x: -layout.focus.x, y: -layout.focus.y, width: layout.width, height: layout.height };
-    // Cropping keeps the frame within the photos' overlap; layering lets it cover any photo.
-    const area = options.edges === "crop" ? layout.intersection : layout.union;
-    const region: Rect = { ...area, x: area.x - layout.focus.x, y: area.y - layout.focus.y };
-    return { frame, bounds: unionRect(region, frame), ratio: layoutOptionsFrom(options).aspectRatio };
+    return frameGeometry(plan.layout, options.edges, layoutOptionsFrom(options).aspectRatio);
   }
 
   #toCanvas(point: Point): Point {

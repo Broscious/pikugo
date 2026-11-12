@@ -29,6 +29,8 @@
 .i-crop { --icon: url("../assets/icons/crop.svg"); }
 .i-download { --icon: url("../assets/icons/download.svg"); }
 .i-eye { --icon: url("../assets/icons/eye.svg"); }
+.i-link { --icon: url("../assets/icons/link.svg"); }
+.i-unlink { --icon: url("../assets/icons/unlink.svg"); }
 .i-gauge { --icon: url("../assets/icons/gauge.svg"); }
 .i-grid { --icon: url("../assets/icons/grid.svg"); }
 .i-images { --icon: url("../assets/icons/images.svg"); }

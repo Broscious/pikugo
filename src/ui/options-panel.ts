@@ -15,6 +15,7 @@ import {
   type AnimationOptions,
   type Playback,
 } from "../core/options";
+import { frameGeometry, frameSizeLimits, framingOf, setFrameSize, type FrameGeometry } from "../core/frame-edit";
 import { byId, h, prefersReducedMotion, setRange, syncRangeFill } from "./dom";
 import { tryPlan, type AppState, type AppStore } from "./state";
 
@@ -63,10 +64,12 @@ export class OptionsPanel {
   readonly #aspectCustom = byId("aspectCustom", HTMLInputElement);
   readonly #anchorControls = byId("anchorControls", HTMLDivElement);
   readonly #anchorGrid = byId("anchorGrid", HTMLDivElement);
-  readonly #anchorX = byId("anchorX", HTMLInputElement);
-  readonly #anchorY = byId("anchorY", HTMLInputElement);
-  readonly #anchorXOut = byId("anchorXOut", HTMLOutputElement);
-  readonly #anchorYOut = byId("anchorYOut", HTMLOutputElement);
+  readonly #frameWidth = byId("frameWidth", HTMLInputElement);
+  readonly #frameHeight = byId("frameHeight", HTMLInputElement);
+  readonly #frameWidthOut = byId("frameWidthOut", HTMLOutputElement);
+  readonly #frameHeightOut = byId("frameHeightOut", HTMLOutputElement);
+  readonly #frameSize = byId("frameSize", HTMLDivElement);
+  readonly #frameSizeLock = byId("frameSizeLock", HTMLSpanElement);
   readonly #fillFrame = byId("fillFrameBtn", HTMLButtonElement);
   readonly #sizePresets = byId("sizePresets", HTMLDivElement);
   readonly #quality = byId("qualityRange", HTMLInputElement);
@@ -183,6 +186,13 @@ export class OptionsPanel {
       this.#orderStep = 0;
     }
     this.#markPlaying();
+  }
+
+  /** The current output frame and the area it may cover, or null when there's no valid layout. */
+  #frameGeometry(): FrameGeometry | null {
+    const { images, options } = this.#store.state;
+    const { plan } = tryPlan(images, options);
+    return plan ? frameGeometry(plan.layout, options.edges, parseAspectRatio(options.aspect) ?? null) : null;
   }
 
   /** Anchor matching the current automatic layout, so switching to Fixed doesn't jump. */
@@ -308,10 +318,15 @@ export class OptionsPanel {
       button.addEventListener("click", () => this.update({ anchor }));
       this.#previewOnHover(button, () => ({ anchor }));
     }
-    const setAnchorFromSliders = () =>
-      this.update({ anchor: { x: Number(this.#anchorX.value) / 100, y: Number(this.#anchorY.value) / 100 } });
-    this.#anchorX.addEventListener("input", setAnchorFromSliders);
-    this.#anchorY.addEventListener("input", setAnchorFromSliders);
+    // Width and height resize the frame about the subject, the same way dragging an edge does.
+    const setSize = (size: { width?: number; height?: number }) => {
+      const geometry = this.#frameGeometry();
+      if (geometry) {
+        this.update(framingOf(setFrameSize(geometry, size)));
+      }
+    };
+    this.#frameWidth.addEventListener("input", () => setSize({ width: Number(this.#frameWidth.value) }));
+    this.#frameHeight.addEventListener("input", () => setSize({ height: Number(this.#frameHeight.value) }));
 
     this.#fillFrame.addEventListener("click", () => this.update({ frameSize: null }));
     this.#previewOnHover(this.#fillFrame, () => ({ frameSize: null }));
@@ -321,6 +336,47 @@ export class OptionsPanel {
       this.#aspectCustom.value = "";
       this.update({ ...DEFAULT_OPTIONS });
     });
+  }
+
+  /** Show the frame's size on the W/H sliders, with ranges for how far it can grow or shrink. */
+  #renderFrameSize(): void {
+    // With a fixed aspect ratio, width and height move together: show them linked.
+    const { aspect } = this.#store.state.options;
+    const locked = (parseAspectRatio(aspect) ?? null) !== null;
+    this.#frameSize.dataset.locked = String(locked);
+    this.#frameSizeLock.querySelector(".icon")?.classList.toggle("i-link", locked);
+    this.#frameSizeLock.querySelector(".icon")?.classList.toggle("i-unlink", !locked);
+    const label = locked
+      ? `Width and height are locked to the ${aspect} aspect ratio`
+      : "Width and height change independently. Choose an aspect ratio to lock them together.";
+    this.#frameSizeLock.setAttribute("aria-label", label);
+    this.#frameSizeLock.title = label;
+
+    const geometry = this.#frameGeometry();
+    const sliders = [
+      [this.#frameWidth, this.#frameWidthOut, "width"],
+      [this.#frameHeight, this.#frameHeightOut, "height"],
+    ] as const;
+    const limits = geometry ? frameSizeLimits(geometry) : null;
+    for (const [input, output, key] of sliders) {
+      input.disabled = !geometry || !limits;
+      if (!geometry || !limits) {
+        setRange(input, 0);
+        output.textContent = "–";
+        continue;
+      }
+      const [low, high] = limits[key];
+      input.min = String(Math.floor(low));
+      input.max = String(Math.floor(high));
+      const value = geometry.frame[key];
+      // Leave a slider alone while it's being dragged, so its range doesn't shift under the pointer.
+      if (document.activeElement !== input) {
+        setRange(input, Math.round(value));
+      } else {
+        syncRangeFill(input);
+      }
+      output.textContent = `${Math.round(value)} px`;
+    }
   }
 
   #render(state: AppState): void {
@@ -362,13 +418,9 @@ export class OptionsPanel {
     const loopLength = frameSequence(Math.max(2, state.images.length), options.playback).length * options.frameDelay;
     this.#delayHint.textContent = `${formatFps(options.frameDelay)} · ${formatMilliseconds(loopLength)} per loop`;
 
-    const anchor = options.anchor ?? this.#lastAnchor;
     this.#anchorControls.dataset.disabled = String(options.anchor === null);
     this.#fillFrame.hidden = options.anchor === null || options.frameSize === null;
-    setRange(this.#anchorX, Math.round(anchor.x * 100));
-    setRange(this.#anchorY, Math.round(anchor.y * 100));
-    this.#anchorXOut.textContent = `${Math.round(anchor.x * 100)}%`;
-    this.#anchorYOut.textContent = `${Math.round(anchor.y * 100)}%`;
+    this.#renderFrameSize();
     for (const button of this.#anchorGrid.querySelectorAll<HTMLButtonElement>("button")) {
       const pressed = options.anchor !== null && Number(button.dataset.x) === options.anchor.x && Number(button.dataset.y) === options.anchor.y;
       button.setAttribute("aria-pressed", String(pressed));
