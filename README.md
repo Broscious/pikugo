@@ -14,7 +14,7 @@ server: the site is a static bundle hosted on GitHub Pages.
   photos. Auto-matched points show a dashed marker and a match score; click to adjust one and it becomes
   hand-placed, so later matches leave it alone. Photos without a confident match are left for you to set.
   See [How auto-match works](#how-auto-match-works).
-- **Frame delay**: 20–5000 ms per frame (default 100 ms), with presets, plus **Loop**, **Bounce** (1 2 3 2) or **Smooth bounce** (the default: 1 2 3 3 2 1, holding each end frame at the turnaround so the change of direction feels natural).
+- **Frame delay**: 20–5000 ms per frame (default 100 ms), with presets, plus **Sway** (the default: 1 2 3 3 2 1, holding each end frame at the turnaround so the change of direction feels natural, like a pendulum), **Bounce** (1 2 3 2, turning straight round) or **Loop** (1 2 3, then back to the start). The frame order for each is shown under the buttons, and hovering any option previews it.
 - **Framing options**
   - **Crop to overlap**: keep only the area every photo covers, so frames never show empty corners.
   - **Layer with transparency**: keep every pixel. Areas a photo doesn't cover become transparent.

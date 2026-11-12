@@ -13,8 +13,9 @@ import {
   STILL_FORMATS,
   parseAspectRatio,
   type AnimationOptions,
+  type Playback,
 } from "../core/options";
-import { byId, h, setRange, syncRangeFill } from "./dom";
+import { byId, h, prefersReducedMotion, setRange, syncRangeFill } from "./dom";
 import { tryPlan, type AppState, type AppStore } from "./state";
 
 type OptionPatch = Partial<AnimationOptions>;
@@ -38,6 +39,19 @@ const ANCHOR_NAMES = [
   "Bottom right intersection",
 ];
 
+/**
+ * How long each tick in the frame order row stays highlighted. Fixed and slow,
+ * so the order is easy to follow whatever frame delay is chosen.
+ */
+const ORDER_STEP_MS = 200;
+
+/** What each playback mode looks like, shown under the playback buttons. */
+const PLAYBACK_HINTS: Readonly<Record<Playback, string>> = {
+  smooth: "Back and forth, pausing on the first and last photo like a pendulum.",
+  bounce: "Back and forth, turning straight round at each end.",
+  loop: "Forwards, then jumps back to the first photo.",
+};
+
 /** The options sidebar. Every control previews its effect on hover. */
 export class OptionsPanel {
   readonly #store: AppStore;
@@ -57,6 +71,13 @@ export class OptionsPanel {
   readonly #quality = byId("qualityRange", HTMLInputElement);
   readonly #qualityOut = byId("qualityOut", HTMLOutputElement);
   readonly #stillHint = byId("stillFormatHint", HTMLParagraphElement);
+  readonly #playbackOrder = byId("playbackOrder", HTMLDivElement);
+  readonly #playbackHint = byId("playbackHint", HTMLParagraphElement);
+  /** What the frame order row currently shows, so it's only rebuilt when that changes. */
+  #orderKey = "";
+  /** Highlighted position in the frame order row, or null while it isn't animating. */
+  #orderStep: number | null = null;
+  #orderTimer: ReturnType<typeof setInterval> | undefined;
   /** Last fixed anchor, restored when switching back from Auto. */
   #lastAnchor: Point = { x: 0.5, y: 0.5 };
 
@@ -67,9 +88,56 @@ export class OptionsPanel {
     store.subscribe((state, previous) => {
       if (state.options !== previous.options || state.images !== previous.images) {
         this.#render(state);
+      } else if (state.hoverOptions !== previous.hoverOptions) {
+        this.#renderOrder(state);
       }
     });
     this.#render(store.state);
+    this.#bindOrderAnimation();
+  }
+
+  /**
+   * Step through the frame order on its own clock (independent of the
+   * preview's frame delay), but only while the pointer is over the playback
+   * field or focus is inside it, so it doesn't distract the rest of the time.
+   */
+  #bindOrderAnimation(): void {
+    const field = this.#playbackOrder.parentElement;
+    if (!field) {
+      return;
+    }
+    let hovered = false;
+    const update = () => {
+      const active = (hovered || field.contains(document.activeElement)) && !prefersReducedMotion();
+      if (active === (this.#orderTimer !== undefined)) {
+        return;
+      }
+      if (active) {
+        this.#orderStep = 0;
+        this.#orderTimer = setInterval(() => {
+          this.#orderStep = ((this.#orderStep ?? -1) + 1) % Math.max(1, this.#playbackOrder.childElementCount);
+          this.#markPlaying();
+        }, ORDER_STEP_MS);
+      } else {
+        clearInterval(this.#orderTimer);
+        this.#orderTimer = undefined;
+        this.#orderStep = null;
+      }
+      this.#markPlaying();
+    };
+    field.addEventListener("pointerenter", (event) => {
+      if (event.pointerType === "mouse") {
+        hovered = true;
+        update();
+      }
+    });
+    field.addEventListener("pointerleave", () => {
+      hovered = false;
+      update();
+    });
+    field.addEventListener("focusin", update);
+    // Focus has moved on by the time the next task runs.
+    field.addEventListener("focusout", () => setTimeout(update));
   }
 
   update(patch: OptionPatch): void {
@@ -77,6 +145,43 @@ export class OptionsPanel {
       this.#lastAnchor = patch.anchor;
     }
     this.#store.set((state) => ({ options: { ...state.options, ...patch }, hoverOptions: null }));
+  }
+
+  #markPlaying(): void {
+    [...this.#playbackOrder.children].forEach((tick, index) => tick.classList.toggle("is-playing", index === this.#orderStep));
+  }
+
+  /**
+   * Spell out the frame order of the hovered (or else the selected) playback
+   * mode, so the difference between the modes is visible without playing them.
+   */
+  #renderOrder(state: AppState): void {
+    const playback = state.hoverOptions?.playback ?? state.options.playback;
+    const count = state.images.length;
+    // With no photos yet, show what three would do.
+    const sequence = frameSequence(count || 3, playback);
+    const key = `${playback}:${count}`;
+    if (key === this.#orderKey) {
+      return;
+    }
+    this.#orderKey = key;
+    this.#playbackOrder.replaceChildren(
+      ...sequence.map((index, i) => {
+        // A photo shown twice in a row is drawn as one long tick: that's the pause at the turnaround.
+        // When the sequence ends on the photo it starts with, that pause spans the loop, so both ends are marked.
+        const wraps = sequence.length > 1 && sequence[0] === sequence.at(-1) && (i === 0 || i === sequence.length - 1);
+        const hold = sequence[i - 1] === index ? "end" : sequence[i + 1] === index ? "start" : wraps ? "wrap" : undefined;
+        return h("span", { className: "frame-tick", "data-hold": hold }, String(index + 1));
+      }),
+    );
+    this.#playbackOrder.setAttribute("aria-label", `Frame order: ${sequence.map((index) => index + 1).join(", ")}`);
+    this.#playbackHint.textContent =
+      playback !== "loop" && count > 0 && count < 3 ? "Needs at least 3 photos to go back and forth. Until then it plays as a loop." : PLAYBACK_HINTS[playback];
+    // Start each newly shown order from its first frame.
+    if (this.#orderStep !== null) {
+      this.#orderStep = 0;
+    }
+    this.#markPlaying();
   }
 
   /** Anchor matching the current automatic layout, so switching to Fixed doesn't jump. */
@@ -248,6 +353,7 @@ export class OptionsPanel {
     for (const chip of this.#delayPresets.querySelectorAll<HTMLButtonElement>("[data-delay]")) {
       chip.setAttribute("aria-pressed", String(Number(chip.dataset.delay) === options.frameDelay));
     }
+    this.#renderOrder(state);
     const loopLength = frameSequence(Math.max(2, state.images.length), options.playback).length * options.frameDelay;
     this.#delayHint.textContent = `${formatFps(options.frameDelay)} · ${formatMilliseconds(loopLength)} per loop`;
 

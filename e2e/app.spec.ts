@@ -86,7 +86,7 @@ test("sample photos produce a valid animated WebP in a worker", async ({ page })
   await loadSamples(page);
   const bytes = await generate(page);
   const info = inspectAnimation(bytes);
-  // Default playback is smooth bounce: 0 1 2 2 1 0.
+  // Default playback is sway: 0 1 2 2 1 0.
   expect(info.frames).toHaveLength(6);
   expect(info.frames.every((frame) => frame.duration === 100)).toBe(true);
   expect(info.loopCount).toBe(0);
@@ -95,6 +95,29 @@ test("sample photos produce a valid animated WebP in a worker", async ({ page })
   await expect(page.locator("#resultStats")).toContainText("Web Worker");
   await expect(page.locator("#downloadBtn")).toHaveAttribute("download", /^pikugo-\d{8}-\d{6}\.webp$/);
   expect(errors).toEqual([]);
+});
+
+test("the frame order shows how each playback mode plays", async ({ page }) => {
+  await loadSamples(page);
+  const order = page.locator("#playbackOrder");
+  // Sway is the default and holds each end frame.
+  await expect(order).toHaveAttribute("aria-label", "Frame order: 1, 2, 3, 3, 2, 1");
+  await expect(order.locator('[data-hold="start"]')).toHaveText(["3"]);
+  // The pause on photo 1 spans the end of one loop and the start of the next.
+  await expect(order.locator('[data-hold="wrap"]')).toHaveText(["1", "1"]);
+  // Hovering another mode shows its order without selecting it.
+  await page.getByRole("radio", { name: "Bounce", exact: true }).hover();
+  await expect(order).toHaveAttribute("aria-label", "Frame order: 1, 2, 3, 2");
+  await expect(page.locator("#playbackHint")).toContainText("turning straight round");
+  // While the pointer is over the field, the order plays through, one frame every 500 ms whatever the frame delay.
+  await expect(order.locator(".frame-tick").nth(1)).toHaveClass(/is-playing/, { timeout: 1500 });
+  await expect(order.locator(".is-playing")).toHaveCount(1);
+  // Away from it, the order goes back to the selected mode and stops animating.
+  await page.mouse.move(0, 0);
+  await expect(order).toHaveAttribute("aria-label", "Frame order: 1, 2, 3, 3, 2, 1");
+  await expect(order.locator(".is-playing")).toHaveCount(0);
+  await page.waitForTimeout(600);
+  await expect(order.locator(".is-playing")).toHaveCount(0);
 });
 
 test("frame delay and bounce playback are written to the file", async ({ page }) => {
@@ -267,7 +290,7 @@ test("stills export as aligned PNGs in a zip, matching the animation", async ({ 
   const { filename, bytes } = await exportStills(page, "Exported 3 PNG stills");
   expect(filename).toMatch(/^pikugo-stills-\d{8}-\d{6}\.zip$/);
   const entries = readZip(bytes);
-  // One still per photo, in photo order, even though smooth bounce repeats frames.
+  // One still per photo, in photo order, even though sway repeats frames.
   expect(entries.map((entry) => entry.name)).toEqual(["01-sample-1.png", "02-sample-2.png", "03-sample-3.png"]);
   for (const entry of entries) {
     expect(pngSize(entry.data)).toEqual({ width: animation.width, height: animation.height });

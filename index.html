@@ -201,6 +201,7 @@
           <header class="panel-head">
             <h2 id="options-title"><span class="icon i-resize" aria-hidden="true"></span> Animation options</h2>
             <button id="resetOptionsBtn" class="button button-quiet" type="button">Reset</button>
+            <p class="panel-hint hover-only"><span class="icon i-eye" aria-hidden="true"></span> Hover over an option to preview it in the animation.</p>
           </header>
 
           <fieldset class="option-group">
@@ -217,10 +218,17 @@
             <div class="field">
               <span class="field-label" id="playbackLabel">Playback</span>
               <div class="segmented" role="radiogroup" aria-labelledby="playbackLabel" data-option="playback">
-                <button type="button" role="radio" data-value="loop" title="Plays forwards and starts over: 1 2 3"><span class="icon i-repeat" aria-hidden="true"></span> Loop</button>
-                <button type="button" role="radio" data-value="bounce" title="Forwards then backwards: 1 2 3 2"><span class="icon i-bounce" aria-hidden="true"></span> Bounce</button>
-                <button type="button" role="radio" data-value="smooth" title="Smooth bounce: holds the end frames at each turnaround, 1 2 3 3 2 1"><span class="icon i-bounce-smooth" aria-hidden="true"></span> Smooth</button>
+                <button type="button" role="radio" data-value="smooth"><span class="icon i-bounce-smooth" aria-hidden="true"></span> Sway</button>
+                <button type="button" role="radio" data-value="bounce"><span class="icon i-bounce" aria-hidden="true"></span> Bounce</button>
+                <button type="button" role="radio" data-value="loop"><span class="icon i-repeat" aria-hidden="true"></span> Loop</button>
               </div>
+              <div id="playbackOrder" class="frame-order" role="img"></div>
+              <p id="playbackHint" class="field-hint"></p>
+              <p class="field-hint field-hint-tip">
+                <span class="icon i-eye" aria-hidden="true"></span>
+                <span class="hover-only">Hover over Sway, Bounce or Loop to watch it in the live preview at your frame delay.</span>
+                <span class="touch-only">Tap Sway, Bounce or Loop to watch it in the live preview at your frame delay.</span>
+              </p>
             </div>
           </fieldset>
 

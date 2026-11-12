@@ -345,6 +345,28 @@ main {
   color: var(--accent);
 }
 
+.panel-hint {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* Hover hints only make sense with a mouse or trackpad. */
+@media (hover: none) {
+  .hover-only {
+    display: none;
+  }
+}
+
+@media (hover: hover) {
+  .touch-only {
+    display: none;
+  }
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;

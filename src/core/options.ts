@@ -3,8 +3,8 @@ import { clamp, type EdgeMode, type LayoutOptions, type Point } from "./geometry
 /**
  * - loop: 0 1 2 3 | 0 1 2 3
  * - bounce: forwards then backwards, end frames shown once: 0 1 2 3 2 1 | 0 ...
- * - smooth: forwards then backwards, end frames shown twice so the turnaround
- *   lingers like a real change of direction: 0 1 2 3 3 2 1 0 | 0 ...
+ * - smooth (shown as "Sway"): forwards then backwards, end frames shown twice
+ *   so the turnaround lingers like a real change of direction: 0 1 2 3 3 2 1 0 | 0 ...
  * Both bounce modes need at least 3 frames; with fewer they play as a loop.
  */
 export type Playback = "loop" | "bounce" | "smooth";
@@ -12,7 +12,7 @@ export type Playback = "loop" | "bounce" | "smooth";
 export const PLAYBACK_LABELS: Readonly<Record<Playback, string>> = Object.freeze({
   loop: "Loop",
   bounce: "Bounce",
-  smooth: "Smooth bounce",
+  smooth: "Sway",
 });
 
 /** Narrow an arbitrary value to a playback mode, falling back to the default. */

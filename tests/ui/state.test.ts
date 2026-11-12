@@ -58,7 +58,7 @@ describe("describePreview", () => {
     [{ anchor: null }, "Automatic focus position"],
     [{ frameDelay: 150 }, "150 ms per frame"],
     [{ playback: "bounce" as const }, "Bounce playback"],
-    [{ playback: "smooth" as const }, "Smooth bounce playback"],
+    [{ playback: "smooth" as const }, "Sway playback"],
     [{ playback: "loop" as const }, "Loop playback"],
     [{ maxEdge: null }, "Original size"],
   ])("describes %j", (patch, text) => {
