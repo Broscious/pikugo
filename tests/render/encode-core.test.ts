@@ -57,6 +57,7 @@ function plan(overrides: Partial<EncodePlan> = {}): EncodePlan {
     sequence: [0, 1, 2],
     frameDelay: 100,
     quality: 0.8,
+    format: "webp",
     ...overrides,
   };
 }
@@ -71,6 +72,34 @@ describe("drawFrame", () => {
     expect(calls).toContainEqual(["setTransform", 0.5, 0, 0, 0.5, 0, 0]);
     expect(calls).toContainEqual(["drawImage", image(7), -10, 5, 100, 80]);
     expect(calls.at(-1)).toEqual(["setTransform", 1, 0, 0, 1, 0, 0]);
+  });
+});
+
+describe("encodeAnimation as GIF", () => {
+  it("reads back each frame's pixels once and builds a GIF following the sequence", async () => {
+    let lastImage = -1;
+    const reads: number[] = [];
+    const context = {
+      setTransform() {},
+      clearRect() {},
+      drawImage(source: { id: number }) {
+        lastImage = source.id;
+      },
+      getImageData(_x: number, _y: number, width: number, height: number) {
+        reads.push(lastImage);
+        // Each image is a solid grey whose level depends on its id.
+        return { data: new Uint8ClampedArray(width * height * 4).fill(lastImage * 60 + 30) };
+      },
+    } as unknown as CanvasRenderingContext2D;
+    const toBlob = vi.fn();
+    const progress = vi.fn();
+    const result = await encodeAnimation([image(0), image(1), image(2)], plan({ format: "gif", sequence: [0, 1, 2, 2, 1, 0] }), { context, toBlob }, progress);
+    expect(reads).toEqual([0, 1, 2]);
+    expect(toBlob).not.toHaveBeenCalled();
+    expect(progress.mock.calls.at(-1)).toEqual([3, 3]);
+    expect(result.frameCount).toBe(6);
+    expect(String.fromCharCode(...result.bytes.subarray(0, 6))).toBe("GIF89a");
+    expect(result.bytes.at(-1)).toBe(0x3b);
   });
 });
 

@@ -1014,8 +1014,12 @@ main {
   }
 
   /* Stack Create and Export stills as full-width buttons. */
-  .generate-row > .button {
+  .generate-row > .split-button {
     flex: 1 1 100%;
+  }
+
+  .generate-row .split-main {
+    flex: 1;
   }
 
   .header-inner,

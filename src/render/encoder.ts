@@ -9,6 +9,7 @@ import {
   type StillsPlan,
   type TaskResult,
 } from "./encode-core";
+import { ANIMATION_FORMATS } from "../core/options";
 import type { EncodeRequest, EncodeResponse } from "./protocol";
 
 export type EncoderEngine = "worker" | "main-thread";
@@ -124,13 +125,14 @@ async function run(
   return finish(await runOnMainThread(images, task, onProgress), "main-thread");
 }
 
-/** Encode an animated WebP (or a still WebP for a single frame). */
-export async function encodeWebP(images: readonly ImageBitmap[], plan: EncodePlan, onProgress?: ProgressCallback): Promise<EncodeOutcome> {
+/** Encode the animation in the plan's format (a still image for a single frame). */
+export async function encodeAnimationFile(images: readonly ImageBitmap[], plan: EncodePlan, onProgress?: ProgressCallback): Promise<EncodeOutcome> {
   const { result, engine, elapsedMs } = await run(images, { task: "animation", plan }, onProgress);
   if (result.task !== "animation") {
     throw new Error("Encoder returned the wrong kind of result");
   }
-  return { blob: new Blob([result.bytes], { type: "image/webp" }), frameCount: result.frameCount, engine, elapsedMs };
+  const type = ANIMATION_FORMATS[plan.format].mimeType;
+  return { blob: new Blob([result.bytes], { type }), frameCount: result.frameCount, engine, elapsedMs };
 }
 
 export interface StillsOutcome {

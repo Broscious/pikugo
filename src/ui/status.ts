@@ -1,5 +1,5 @@
 import { formatAspect, formatBytes, formatFps, formatMilliseconds, formatPercent } from "../core/format";
-import { PLAYBACK_LABELS } from "../core/options";
+import { ANIMATION_FORMATS, PLAYBACK_LABELS, STILL_FORMATS } from "../core/options";
 import { byId, h } from "./dom";
 import { signatureOf, tryPlan, type AppState, type AppStore } from "./state";
 
@@ -18,6 +18,8 @@ export class Summary {
   readonly #generateLabel = byId("generateLabel", HTMLSpanElement);
   readonly #stills = byId("stillsBtn", HTMLButtonElement);
   readonly #stillsLabel = byId("stillsLabel", HTMLSpanElement);
+  readonly #generateFormat = byId("generateFormatBtn", HTMLButtonElement);
+  readonly #stillsFormat = byId("stillsFormatBtn", HTMLButtonElement);
   readonly #progress = byId("progress", HTMLDivElement);
   readonly #progressBar = byId("progressBar", HTMLDivElement);
   readonly #progressText = byId("progressText", HTMLSpanElement);
@@ -52,15 +54,19 @@ export class Summary {
     }
 
     const encoding = state.encoding;
+    const animation = ANIMATION_FORMATS[state.options.animationFormat].label;
+    const still = STILL_FORMATS[state.options.stillFormat].label;
+    const several = state.images.length > 1;
     this.#generate.disabled = !plan || encoding !== null;
-    this.#generateLabel.textContent =
-      encoding?.task === "animation" ? "Encoding…" : state.images.length > 1 ? "Create animated WebP" : "Create WebP";
+    this.#generateLabel.textContent = encoding?.task === "animation" ? "Encoding…" : several ? `Create animated ${animation}` : `Create ${animation}`;
     this.#stills.disabled = !plan || encoding !== null;
-    this.#stillsLabel.textContent = encoding?.task === "stills" ? "Exporting…" : state.images.length > 1 ? "Export stills" : "Export still";
-    this.#stills.title =
-      state.images.length > 1
-        ? "Download each photo as a PNG, aligned and framed exactly as in the animation (.zip)"
-        : "Download the framed photo as a PNG";
+    this.#stillsLabel.textContent = encoding?.task === "stills" ? "Exporting…" : several ? `Export ${still} stills` : `Export ${still} still`;
+    this.#stills.title = several
+      ? `Download each photo as a ${still}, aligned and framed exactly as in the animation (.zip)`
+      : `Download the framed photo as a ${still}`;
+    // Formats can be changed any time except while encoding.
+    this.#generateFormat.disabled = encoding !== null;
+    this.#stillsFormat.disabled = encoding !== null;
     this.#progress.hidden = encoding === null;
     if (encoding) {
       const fraction = encoding.total > 0 ? encoding.done / encoding.total : 0;
@@ -113,6 +119,7 @@ export class ResultView {
   readonly #image = byId("resultImage", HTMLImageElement);
   readonly #stats = byId("resultStats", HTMLDListElement);
   readonly #download = byId("downloadBtn", HTMLAnchorElement);
+  readonly #downloadLabel = byId("downloadLabel", HTMLSpanElement);
   readonly #stale = byId("staleBadge", HTMLSpanElement);
 
   constructor(store: AppStore) {
@@ -138,9 +145,12 @@ export class ResultView {
     }
     this.#download.href = result.url;
     this.#download.download = result.filename;
+    this.#downloadLabel.textContent = `Download ${result.format}`;
+    this.#image.alt = `Generated ${result.frameCount > 1 ? "animated " : ""}${result.format}`;
     this.#stale.hidden = result.signature === signatureOf(state);
     this.#stats.replaceChildren(
       ...[
+        ["Format", result.format],
         ["Size", formatBytes(result.bytes)],
         ["Dimensions", `${result.width} × ${result.height}`],
         ["Frames", String(result.frameCount)],

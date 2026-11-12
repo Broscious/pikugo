@@ -52,6 +52,7 @@ describe("sanitizeOptions", () => {
       maxEdge: null,
       quality: 0.5,
       stillFormat: "jpeg",
+      animationFormat: "gif",
     };
     expect(sanitizeOptions(options)).toEqual(options);
   });
@@ -66,6 +67,7 @@ describe("sanitizeOptions", () => {
       maxEdge: 2,
       quality: 9,
       stillFormat: "gif",
+      animationFormat: "bmp",
     });
     expect(result).toEqual({
       frameDelay: FRAME_DELAY_MIN,
@@ -77,6 +79,7 @@ describe("sanitizeOptions", () => {
       maxEdge: DEFAULT_OPTIONS.maxEdge,
       quality: 1,
       stillFormat: "png",
+      animationFormat: "webp",
     });
     expect(sanitizeOptions({ frameDelay: 1e9 }).frameDelay).toBe(FRAME_DELAY_MAX);
   });

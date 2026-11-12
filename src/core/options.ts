@@ -40,6 +40,37 @@ export interface AnimationOptions {
   quality: number;
   /** File format for "Export stills". */
   stillFormat: StillFormat;
+  /** File format for the animation. */
+  animationFormat: AnimationFormat;
+}
+
+export type AnimationFormat = "webp" | "gif";
+
+export interface AnimationFormatInfo {
+  label: string;
+  mimeType: string;
+  extension: string;
+  /** Short trade-off summary shown in the format menu. */
+  description: string;
+}
+
+export const ANIMATION_FORMATS: Readonly<Record<AnimationFormat, AnimationFormatInfo>> = Object.freeze({
+  webp: {
+    label: "WebP",
+    mimeType: "image/webp",
+    extension: "webp",
+    description: "Small files in full colour, with smooth transparency. Plays in all current browsers and most apps.",
+  },
+  gif: {
+    label: "GIF",
+    mimeType: "image/gif",
+    extension: "gif",
+    description: "Plays almost anywhere, including older apps and chats. Limited to 256 colours, so files are larger. Ignores Quality.",
+  },
+});
+
+export function parseAnimationFormat(value: unknown): AnimationFormat {
+  return value === "webp" || value === "gif" ? value : DEFAULT_OPTIONS.animationFormat;
 }
 
 export type StillFormat = "png" | "jpeg" | "webp";
@@ -103,6 +134,7 @@ export const DEFAULT_OPTIONS: Readonly<AnimationOptions> = Object.freeze({
   maxEdge: 1080,
   quality: 0.85,
   stillFormat: "png",
+  animationFormat: "webp",
 });
 
 export const ASPECT_PRESETS: readonly { label: string; value: string }[] = [
@@ -192,6 +224,7 @@ export function sanitizeOptions(input: unknown): AnimationOptions {
     maxEdge: raw.maxEdge === null ? null : maxEdge !== undefined && maxEdge >= 16 ? Math.round(maxEdge) : DEFAULT_OPTIONS.maxEdge,
     quality: quality === undefined ? DEFAULT_OPTIONS.quality : clamp(quality, 0.05, 1),
     stillFormat: parseStillFormat(raw.stillFormat),
+    animationFormat: parseAnimationFormat(raw.animationFormat),
   };
 }
 

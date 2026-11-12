@@ -1,4 +1,6 @@
 import type { Rect, Size } from "../core/geometry";
+import { buildGif, type GifFrame } from "../core/gif";
+import type { AnimationFormat } from "../core/options";
 import { buildAnimatedWebP, extractFrame, type EncodedFrame } from "../core/webp";
 
 export type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -30,7 +32,9 @@ export interface StillFormatPlan {
 export interface EncodePlan extends StillsPlan {
   sequence: number[];
   frameDelay: number;
+  /** WebP quality (GIF ignores it). */
   quality: number;
+  format: AnimationFormat;
 }
 
 export interface EncodeResult {
@@ -78,6 +82,9 @@ export async function encodeAnimation(
   if (images.length !== plan.placements.length) {
     throw new Error("Each image needs exactly one placement");
   }
+  if (plan.format === "gif") {
+    return encodeGifAnimation(images, plan, surface, onProgress);
+  }
   const used = [...new Set(plan.sequence)].sort((a, b) => a - b);
   const frames: EncodedFrame[] = [];
   let lastStill: Uint8Array<ArrayBuffer> | undefined;
@@ -108,6 +115,32 @@ export async function encodeAnimation(
       sequence: plan.sequence,
       frameDelay: plan.frameDelay,
     }),
+    frameCount: plan.sequence.length,
+  };
+}
+
+/** Render each source image once, read its pixels back and encode a GIF. */
+function encodeGifAnimation(
+  images: readonly CanvasImageSource[],
+  plan: EncodePlan,
+  surface: FrameSurface,
+  onProgress?: ProgressCallback,
+): EncodeResult {
+  const used = [...new Set(plan.sequence)].sort((a, b) => a - b);
+  const frames: GifFrame[] = [];
+  const { width, height } = plan.output;
+  for (const [step, index] of used.entries()) {
+    const image = images[index];
+    const placement = plan.placements[index];
+    if (image === undefined || placement === undefined) {
+      throw new Error(`Sequence references missing image ${index}`);
+    }
+    drawFrame(surface.context, image, placement, plan.output, plan.scale);
+    frames[index] = { pixels: surface.context.getImageData(0, 0, width, height).data };
+    onProgress?.(step + 1, used.length);
+  }
+  return {
+    bytes: buildGif(frames, { width, height, sequence: plan.sequence, frameDelay: plan.frameDelay }),
     frameCount: plan.sequence.length,
   };
 }

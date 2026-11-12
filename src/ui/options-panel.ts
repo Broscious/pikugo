@@ -10,7 +10,6 @@ import {
   frameSequence,
   parsePlayback,
   parseStillFormat,
-  STILL_FORMATS,
   parseAspectRatio,
   type AnimationOptions,
   type Playback,
@@ -73,7 +72,6 @@ export class OptionsPanel {
   readonly #sizePresets = byId("sizePresets", HTMLDivElement);
   readonly #quality = byId("qualityRange", HTMLInputElement);
   readonly #qualityOut = byId("qualityOut", HTMLOutputElement);
-  readonly #stillHint = byId("stillFormatHint", HTMLParagraphElement);
   readonly #playbackOrder = byId("playbackOrder", HTMLDivElement);
   readonly #playbackHint = byId("playbackHint", HTMLParagraphElement);
   /** What the frame order row currently shows, so it's only rebuilt when that changes. */
@@ -410,7 +408,6 @@ export class OptionsPanel {
 
     setRange(this.#quality, Math.round(options.quality * 100));
     this.#qualityOut.textContent = `${Math.round(options.quality * 100)}%`;
-    this.#stillHint.textContent = STILL_FORMATS[options.stillFormat].description;
     syncRangeFill(this.#quality);
   }
 }

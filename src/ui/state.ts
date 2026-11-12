@@ -20,6 +20,8 @@ export interface SourceImage extends FrameSource {
 export interface GeneratedResult {
   url: string;
   filename: string;
+  /** File format label, e.g. "WebP". */
+  format: string;
   bytes: number;
   width: number;
   height: number;

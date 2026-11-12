@@ -15,6 +15,58 @@ function trackErrors(page: Page): string[] {
   return errors;
 }
 
+/** Pick a format from the ▾ menu on an export button ("generate" or "stills"). */
+async function chooseFormat(page: Page, button: "generate" | "stills", format: string) {
+  await page.locator(`#${button}FormatBtn`).click();
+  const item = page.locator(`#${button}FormatMenu`).getByRole("menuitemradio", { name: new RegExp(`^${format}`) });
+  await item.click();
+  await expect(page.locator(`#${button}FormatMenu`)).toBeHidden();
+}
+
+/** Frame delays (centiseconds), loop count and size from a GIF's blocks. */
+function inspectGif(bytes: Uint8Array) {
+  const ascii = (from: number, length: number) => String.fromCharCode(...bytes.subarray(from, from + length));
+  const u16 = (at: number) => bytes[at]! | (bytes[at + 1]! << 8);
+  expect(ascii(0, 6)).toBe("GIF89a");
+  const skipSubBlocks = (from: number) => {
+    let p = from;
+    while (bytes[p] !== 0) {
+      p += bytes[p]! + 1;
+    }
+    return p + 1;
+  };
+  let p = 13 + (bytes[10]! & 0x80 ? 3 << ((bytes[10]! & 7) + 1) : 0);
+  const delays: number[] = [];
+  let loopCount: number | null = null;
+  while (bytes[p] !== 0x3b) {
+    if (bytes[p] === 0x21) {
+      if (bytes[p + 1] === 0xf9) {
+        delays.push(u16(p + 4));
+      } else if (bytes[p + 1] === 0xff && ascii(p + 3, 11) === "NETSCAPE2.0") {
+        loopCount = u16(p + 16);
+      }
+      p = skipSubBlocks(p + 2);
+    } else if (bytes[p] === 0x2c) {
+      p = skipSubBlocks(p + 11);
+    } else {
+      throw new Error(`Unexpected GIF block at ${p}`);
+    }
+  }
+  return { width: u16(6), height: u16(8), delays, loopCount };
+}
+
+/** RGBA of the shown result's first frame at a few points, as fractions of its size. */
+async function resultPixels(page: Page, points: [number, number][]) {
+  return page.evaluate(async (spots) => {
+    const image = document.querySelector<HTMLImageElement>("#resultImage")!;
+    const bitmap = await createImageBitmap(await (await fetch(image.src)).blob());
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext("2d")!;
+    context.drawImage(bitmap, 0, 0);
+    return spots.map(([x, y]) => [...context.getImageData(Math.floor(x * bitmap.width), Math.floor(y * bitmap.height), 1, 1).data]);
+  }, points);
+}
+
 async function loadSamples(page: Page) {
   await page.goto("./");
   await page.getByRole("button", { name: "Try sample photos" }).click();
@@ -95,6 +147,72 @@ test("sample photos produce a valid animated WebP in a worker", async ({ page })
   await expect(page.locator("#resultStats")).toContainText("Web Worker");
   await expect(page.locator("#downloadBtn")).toHaveAttribute("download", /^pikugo-\d{8}-\d{6}\.webp$/);
   expect(errors).toEqual([]);
+});
+
+test("the animation can be exported as a GIF from the Create button's menu", async ({ page }) => {
+  const errors = trackErrors(page);
+  await loadSamples(page);
+  await page.getByRole("button", { name: "Pause preview" }).click();
+  await expect(page.locator("#generateLabel")).toHaveText("Create animated WebP");
+  const webp = inspectAnimation(await generate(page));
+  const spots: [number, number][] = [
+    [0.5, 0.5],
+    [0.2, 0.2],
+    [0.8, 0.85],
+  ];
+  const webpPixels = await resultPixels(page, spots);
+
+  // The menu describes each format and marks the current one.
+  await page.locator("#generateFormatBtn").click();
+  const menu = page.locator("#generateFormatMenu");
+  await expect(menu.getByRole("menuitemradio", { name: /^WebP/ })).toHaveAttribute("aria-checked", "true");
+  await expect(menu.getByRole("menuitemradio", { name: /^GIF/ })).toContainText("256 colours");
+  await menu.getByRole("menuitemradio", { name: /^GIF/ }).click();
+  await expect(page.locator("#generateLabel")).toHaveText("Create animated GIF");
+  // A GIF is a different file, so the WebP result is out of date.
+  await expect(page.locator("#staleBadge")).toBeVisible();
+
+  const gif = inspectGif(await generate(page));
+  expect(gif).toMatchObject({ width: webp.width, height: webp.height, loopCount: 0 });
+  // Sway (0 1 2 2 1 0): the held end frame becomes one frame shown twice as long.
+  expect(gif.delays).toEqual([10, 10, 20, 10, 10]);
+  expect(await resultSize(page)).toEqual({ width: webp.width, height: webp.height });
+  // The browser decodes it to the same picture, within what 256 colours allow.
+  const gifPixels = await resultPixels(page, spots);
+  gifPixels.forEach((pixel, i) => {
+    for (let c = 0; c < 3; c += 1) {
+      expect(Math.abs(pixel[c]! - webpPixels[i]![c]!)).toBeLessThan(40);
+    }
+  });
+  await expect(page.locator("#downloadBtn")).toHaveAttribute("download", /^pikugo-\d{8}-\d{6}\.gif$/);
+  await expect(page.locator("#downloadLabel")).toHaveText("Download GIF");
+  await expect(page.locator("#resultStats")).toContainText("GIF");
+  expect(errors).toEqual([]);
+});
+
+test("the format menus work from the keyboard", async ({ page }) => {
+  await loadSamples(page);
+  const toggle = page.locator("#stillsFormatBtn");
+  await toggle.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#stillsFormatMenu").getByRole("menuitemradio").first()).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(page.locator("#stillsFormatMenu").getByRole("menuitemradio", { name: /^WebP/ })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#stillsFormatMenu")).toBeHidden();
+  await expect(toggle).toBeFocused();
+  // Nothing was picked, so the format is unchanged.
+  await expect(page.locator("#stillsLabel")).toHaveText("Export PNG stills");
+
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#stillsLabel")).toHaveText("Export JPEG stills");
+  // Clicking elsewhere closes an open menu.
+  await toggle.click();
+  await page.locator(".brand").click();
+  await expect(page.locator("#stillsFormatMenu")).toBeHidden();
 });
 
 test("the frame order shows how each playback mode plays", async ({ page }) => {
@@ -427,7 +545,7 @@ test("a single photo exports as one PNG", async ({ page }) => {
     await page.locator(".film-item").first().hover();
     await page.locator(".film-action.is-remove").first().click();
   }
-  await expect(page.locator("#stillsLabel")).toHaveText("Export still");
+  await expect(page.locator("#stillsLabel")).toHaveText("Export PNG still");
   const { filename, bytes } = await exportStills(page);
   expect(filename).toBe("01-sample-3.png");
   expect(pngSize(bytes).width).toBeGreaterThan(0);
@@ -436,8 +554,10 @@ test("a single photo exports as one PNG", async ({ page }) => {
 test("stills can be exported as JPEG, flattened onto black where photos don't cover", async ({ page }) => {
   await loadSamples(page);
   await page.getByRole("radio", { name: /Layer with transparency/ }).click();
-  await page.getByRole("radio", { name: "JPEG" }).click();
-  await expect(page.locator("#stillFormatHint")).toContainText("become black");
+  await expect(page.locator("#stillsLabel")).toHaveText("Export PNG stills");
+  await expect(page.locator('#stillsFormatMenu [data-value="jpeg"]')).toContainText("become black");
+  await chooseFormat(page, "stills", "JPEG");
+  await expect(page.locator("#stillsLabel")).toHaveText("Export JPEG stills");
   // Changing the stills format doesn't affect the animation, so the preview badge doesn't appear.
   await expect(page.locator("#previewBadge")).toBeHidden();
 
@@ -468,7 +588,7 @@ test("stills can be exported as JPEG, flattened onto black where photos don't co
 
 test("stills can be exported as WebP and the format persists", async ({ page }) => {
   await loadSamples(page);
-  await page.getByRole("radio", { name: "WebP", exact: true }).click();
+  await chooseFormat(page, "stills", "WebP");
   const { bytes } = await exportStills(page);
   const entries = readZip(bytes);
   expect(entries.map((entry) => entry.name.split(".").pop())).toEqual(["webp", "webp", "webp"]);
@@ -477,7 +597,8 @@ test("stills can be exported as WebP and the format persists", async ({ page }) 
   }
   await page.reload();
   await page.getByRole("button", { name: "Try sample photos" }).click();
-  await expect(page.getByRole("radio", { name: "WebP", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#stillsLabel")).toHaveText("Export WebP stills");
+  await expect(page.locator('#stillsFormatMenu [data-value="webp"]')).toHaveAttribute("aria-checked", "true");
 });
 
 /**

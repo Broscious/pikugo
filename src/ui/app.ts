@@ -1,11 +1,12 @@
 import { stillFilename, timestampedFilename } from "../core/format";
-import { STILL_FORMATS, STILL_MATTE } from "../core/options";
+import { ANIMATION_FORMATS, STILL_FORMATS, STILL_MATTE, type AnimationFormat, type StillFormat } from "../core/options";
 import { createZip } from "../core/zip";
-import { encodeWebP, renderStillFrames } from "../render/encoder";
+import { encodeAnimationFile, renderStillFrames } from "../render/encoder";
 import { matchFocus, type FocusMatch } from "../render/matcher";
 import { byId } from "./dom";
 import { Filmstrip } from "./filmstrip";
 import { FocusEditor } from "./focus-editor";
+import { FormatMenu } from "./format-menu";
 import { createSampleImages, disposeImage, isImageFile, loadImageFile } from "./images";
 import { OptionsPanel } from "./options-panel";
 import { loadAutoMatch, loadOptions, saveAutoMatch, saveOptions, setupThemeToggle } from "./persistence";
@@ -77,6 +78,7 @@ export class App {
     byId("sampleBtn", HTMLButtonElement).addEventListener("click", () => void this.#loadSamples());
     byId("generateBtn", HTMLButtonElement).addEventListener("click", () => void this.generate());
     byId("stillsBtn", HTMLButtonElement).addEventListener("click", () => void this.exportStills());
+    this.#bindFormatMenus();
     this.#fileInput.addEventListener("change", () => {
       const files = [...(this.#fileInput.files ?? [])];
       this.#fileInput.value = "";
@@ -120,6 +122,34 @@ export class App {
         void this.addFiles(files);
       }
     });
+  }
+
+  /** The ▾ menus on the export buttons choose the animation and stills formats. */
+  #bindFormatMenus(): void {
+    const setOption = (patch: { animationFormat: AnimationFormat } | { stillFormat: StillFormat }) =>
+      this.store.set((state) => ({ options: { ...state.options, ...patch } }));
+    const animation = new FormatMenu<AnimationFormat>({
+      toggle: byId("generateFormatBtn", HTMLButtonElement),
+      menu: byId("generateFormatMenu", HTMLDivElement),
+      choices: (Object.keys(ANIMATION_FORMATS) as AnimationFormat[]).map((value) => ({ value, ...ANIMATION_FORMATS[value] })),
+      onChoose: (animationFormat) => setOption({ animationFormat }),
+    });
+    const stills = new FormatMenu<StillFormat>({
+      toggle: byId("stillsFormatBtn", HTMLButtonElement),
+      menu: byId("stillsFormatMenu", HTMLDivElement),
+      choices: (Object.keys(STILL_FORMATS) as StillFormat[]).map((value) => ({ value, ...STILL_FORMATS[value] })),
+      onChoose: (stillFormat) => setOption({ stillFormat }),
+    });
+    const sync = () => {
+      animation.setValue(this.store.state.options.animationFormat);
+      stills.setValue(this.store.state.options.stillFormat);
+    };
+    this.store.subscribe((state, previous) => {
+      if (state.options !== previous.options) {
+        sync();
+      }
+    });
+    sync();
   }
 
   async addFiles(files: File[]): Promise<void> {
@@ -314,10 +344,11 @@ export class App {
       return;
     }
     const signature = signatureOf(state);
+    const format = ANIMATION_FORMATS[state.options.animationFormat];
     const unique = new Set(plan.sequence).size;
     this.store.set({ encoding: { task: "animation", done: 0, total: unique } });
     try {
-      const outcome = await encodeWebP(
+      const outcome = await encodeAnimationFile(
         state.images.map((image) => image.bitmap),
         {
           output: plan.output,
@@ -326,6 +357,7 @@ export class App {
           sequence: plan.sequence,
           frameDelay: state.options.frameDelay,
           quality: state.options.quality,
+          format: state.options.animationFormat,
         },
         (done, total) => this.store.set({ encoding: { task: "animation", done, total } }),
       );
@@ -336,7 +368,8 @@ export class App {
       this.store.set({
         result: {
           url: URL.createObjectURL(outcome.blob),
-          filename: timestampedFilename("pikugo", "webp"),
+          filename: timestampedFilename("pikugo", format.extension),
+          format: format.label,
           bytes: outcome.blob.size,
           width: plan.output.width,
           height: plan.output.height,

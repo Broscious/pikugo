@@ -1,6 +1,6 @@
 # Pikugo
 
-Turn a handful of photos into a smooth **wiggle animation** (animated WebP), entirely in the browser.
+Turn a handful of photos into a smooth **wiggle animation** (animated WebP or GIF), entirely in the browser.
 
 Pick the point that should stay still in each photo. Pikugo aligns the photos on those points, frames the
 result the way you choose, and encodes an animated WebP on your device. Nothing is uploaded and there is no
@@ -35,9 +35,15 @@ server: the site is a static bundle hosted on GitHub Pages.
   *Outlines* toggles the photo edges and shared area, and *Show cropped* toggles the cropped-away parts.
   Hovering or focusing any option previews it before you apply it.
 - **Output**: longest-edge limit and quality, with the size, duration and coverage shown before encoding.
+- **Animation format**: the ▾ on the Create button picks the format:
+  - **WebP** (default): small files in full colour, with smooth transparency.
+  - **GIF**: plays almost anywhere, including older apps and chats. GIF allows 256 colours, so Pikugo builds
+    one palette shared by every frame (so colours don't flicker) and smooths gradients with ordered
+    dithering (so still areas don't shimmer). Mostly see-through pixels become transparent, and a frame
+    shown twice in a row (as Sway does) is stored once, shown for twice as long. Quality doesn't apply.
 - **Export stills**: download every photo as its own image, aligned and framed exactly as it appears in the
   animation (same size and crop). Several photos come as a `.zip` with files numbered in photo order
-  (`01-IMG_1234.png`, …); a single photo downloads on its own. Formats:
+  (`01-IMG_1234.png`, …); a single photo downloads on its own. The ▾ on the Export button picks the format:
   - **PNG** (default): lossless and keeps transparency. Opens almost anywhere, but makes the largest files.
   - **JPEG**: small files that open anywhere, using the Quality setting. JPEG has no transparency, so in
     layer mode the uncovered areas are filled with black.
@@ -92,6 +98,7 @@ src/
     options.ts             Option model, defaults, validation, frame sequence
     plan.ts                Combines layout, scaling and sequence into an encode plan
     webp.ts                RIFF/WebP chunk reader and animated WebP muxer
+    gif.ts                 GIF encoder: shared palette, ordered dithering, LZW, loop extension
     format.ts              Display formatting helpers
     zip.ts                 Minimal ZIP writer/reader for the stills export
     match.ts               Finds a point from one photo in another (auto-match)
