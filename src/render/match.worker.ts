@@ -1,5 +1,5 @@
 /// Finds matching focus points off the main thread.
-import { matchAll, type MatchImage, type PixelReader } from "./match-core";
+import { matchChains, type MatchImage, type PixelReader } from "./match-core";
 import type { MatchRequest, MatchResponse } from "./match-protocol";
 
 function reply(message: MatchResponse): void {
@@ -19,18 +19,15 @@ const read: PixelReader = (image, width, height) => {
 const asMatchImage = (bitmap: ImageBitmap): MatchImage => ({ image: bitmap, width: bitmap.width, height: bitmap.height });
 
 self.addEventListener("message", (event: MessageEvent<MatchRequest>) => {
-  const { id, reference, focus, targets } = event.data;
+  const { id, images, chains } = event.data;
   try {
-    const outcomes = matchAll(asMatchImage(reference), focus, targets.map(asMatchImage), read, (done, total) =>
-      reply({ id, kind: "progress", done, total }),
-    );
+    const outcomes = matchChains(images.map(asMatchImage), chains, read, (done, total) => reply({ id, kind: "progress", done, total }));
     reply({ id, kind: "done", outcomes });
   } catch (error) {
     reply({ id, kind: "error", message: error instanceof Error ? error.message : String(error) });
   } finally {
-    reference.close();
-    for (const target of targets) {
-      target.close();
+    for (const image of images) {
+      image.close();
     }
   }
 });

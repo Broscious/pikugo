@@ -384,7 +384,9 @@ async function uploadShiftedPhotos(page: Page) {
 
 /** Click a point (in photo pixels) on the photo shown in the focus editor. */
 async function clickPhoto(page: Page, point: { x: number; y: number }) {
-  const box = (await page.locator("#selectedImage").boundingBox())!;
+  const image = page.locator("#selectedImage");
+  await image.scrollIntoViewIfNeeded();
+  const box = (await image.boundingBox())!;
   await page.mouse.click(box.x + (point.x / 640) * box.width, box.y + (point.y / 480) * box.height);
 }
 
@@ -399,6 +401,17 @@ async function showPhoto(page: Page, index: number) {
   await expect(page.locator("#imageCounter")).toHaveText(`${index + 1} / 3`);
 }
 
+/** Where `point` in photo `from` appears in photo `to`. */
+function moved(offsets: { x: number; y: number }[], point: { x: number; y: number }, from: number, to: number) {
+  return { x: point.x + offsets[from]!.x - offsets[to]!.x, y: point.y + offsets[from]!.y - offsets[to]!.y };
+}
+
+/** Clicks land to within a pixel or so on screen; allow a little for that. */
+function expectNear(found: { x: number; y: number }, expected: { x: number; y: number }) {
+  expect(Math.abs(found.x - expected.x)).toBeLessThanOrEqual(3);
+  expect(Math.abs(found.y - expected.y)).toBeLessThanOrEqual(3);
+}
+
 test("auto-match finds the same spot in the other photos", async ({ page }) => {
   const errors = trackErrors(page);
   await page.goto("./");
@@ -406,44 +419,46 @@ test("auto-match finds the same spot in the other photos", async ({ page }) => {
   const clicked = { x: 330, y: 250 };
   await clickPhoto(page, clicked);
 
-  // The other two photos are matched automatically.
+  // The other two photos are matched automatically, each against the photo before it.
   await expect(page.locator('[data-step="focus"] .step-detail')).toHaveText("3/3");
   await expect(page.locator('.film-item[data-auto="true"]')).toHaveCount(2);
   for (const index of [1, 2]) {
     await showPhoto(page, index);
-    const expected = { x: clicked.x + offsets[0]!.x - offsets[index]!.x, y: clicked.y + offsets[0]!.y - offsets[index]!.y };
-    const found = await shownFocus(page);
-    // Clicks land to within a pixel or so on screen; allow a little for that.
-    expect(Math.abs(found.x - expected.x)).toBeLessThanOrEqual(3);
-    expect(Math.abs(found.y - expected.y)).toBeLessThanOrEqual(3);
-    await expect(page.locator("#matchBadge")).toContainText("Auto-matched to photo 1");
+    expectNear(await shownFocus(page), moved(offsets, clicked, 0, index));
+    await expect(page.locator("#matchBadge")).toContainText(`Auto-matched to photo ${index}`);
     await expect(page.locator("#selectionMarker")).toHaveClass(/is-auto/);
   }
 
-  // Adjusting an auto-matched point by hand keeps it from being overwritten later.
-  // It also becomes the point that the remaining auto-matched photo follows.
+  // Adjusting an auto-matched point by hand keeps it from being overwritten later,
+  // and the photos after it are re-matched from it.
   await showPhoto(page, 1);
-  await clickPhoto(page, { x: 100, y: 100 });
+  const adjusted = { x: 100, y: 100 };
+  await clickPhoto(page, adjusted);
   await expect(page.locator("#matchBadge")).toBeHidden();
   await expect(page.locator(".film-item").nth(1)).toHaveAttribute("data-auto", "false");
+  await expect(page.locator('.film-item[data-auto="true"]')).toHaveCount(1);
+  const manual = await shownFocus(page);
   await showPhoto(page, 2);
   await expect(page.locator("#matchBadge")).toContainText("Auto-matched to photo 2");
-  await showPhoto(page, 1);
-  const manual = await shownFocus(page);
+  await expect.poll(async () => Math.abs((await shownFocus(page)).x - moved(offsets, manual, 1, 2).x)).toBeLessThanOrEqual(3);
+  expectNear(await shownFocus(page), moved(offsets, manual, 1, 2));
+  expect(errors).toEqual([]);
+});
 
-  // Placing a new point on photo 1 re-matches photo 3 only.
-  await showPhoto(page, 0);
-  const second = { x: 200, y: 330 };
-  await clickPhoto(page, second);
+test("auto-match works backward from a later photo", async ({ page }) => {
+  const errors = trackErrors(page);
+  await page.goto("./");
+  const offsets = await uploadShiftedPhotos(page);
   await showPhoto(page, 2);
-  // Wait for the new match (it was previously matched to photo 2).
-  await expect(page.locator("#matchBadge")).toContainText("Auto-matched to photo 1");
-  await expect(page.locator('.film-item[data-auto="true"]')).toHaveCount(1);
-  const third = await shownFocus(page);
-  expect(Math.abs(third.x - (second.x + offsets[0]!.x - offsets[2]!.x))).toBeLessThanOrEqual(3);
-  expect(Math.abs(third.y - (second.y + offsets[0]!.y - offsets[2]!.y))).toBeLessThanOrEqual(3);
-  await showPhoto(page, 1);
-  expect(await shownFocus(page)).toEqual(manual);
+  const clicked = { x: 300, y: 220 };
+  await clickPhoto(page, clicked);
+
+  await expect(page.locator('.film-item[data-auto="true"]')).toHaveCount(2);
+  for (const index of [1, 0]) {
+    await showPhoto(page, index);
+    expectNear(await shownFocus(page), moved(offsets, clicked, 2, index));
+    await expect(page.locator("#matchBadge")).toContainText(`Auto-matched to photo ${index + 2}`);
+  }
   expect(errors).toEqual([]);
 });
 

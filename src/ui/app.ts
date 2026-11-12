@@ -11,7 +11,7 @@ import { createSampleImages, disposeImage, isImageFile, loadImageFile } from "./
 import { OptionsPanel } from "./options-panel";
 import { loadAutoMatch, loadOptions, saveAutoMatch, saveOptions, setupThemeToggle } from "./persistence";
 import { Preview } from "./preview";
-import { createAppStore, isManualFocus, signatureOf, tryPlan, type AppStore, type SourceImage } from "./state";
+import { createAppStore, isManualFocus, planMatches, signatureOf, tryPlan, type AppStore, type SourceImage } from "./state";
 import { ResultView, Stepper, Summary } from "./status";
 import { toast } from "./toast";
 
@@ -25,8 +25,6 @@ export class App {
   readonly #options: OptionsPanel;
   readonly #autoMatchToggle = byId("autoMatchToggle", HTMLButtonElement);
   #autoMatch = loadAutoMatch();
-  /** The photo whose hand-placed point the others are matched to. */
-  #referenceId: string | null = null;
   #matchTimer: ReturnType<typeof setTimeout> | undefined;
   /** Incremented for every matching run, so results from superseded runs are dropped. */
   #matchRun = 0;
@@ -34,10 +32,9 @@ export class App {
   constructor() {
     this.store = createAppStore(loadOptions());
     setupThemeToggle();
-    new FocusEditor(this.store, (id) => {
-      this.#referenceId = id;
+    new FocusEditor(this.store, () => {
       // Wait for the user to stop clicking or nudging before matching.
-      this.#scheduleMatch(id, 350);
+      this.#scheduleMatch(350);
     });
     new Filmstrip(this.store, {
       addFiles: () => this.#fileInput.click(),
@@ -70,7 +67,7 @@ export class App {
       this.#autoMatchToggle.setAttribute("aria-pressed", String(this.#autoMatch));
       saveAutoMatch(this.#autoMatch);
       if (this.#autoMatch) {
-        this.#matchFromReference();
+        this.#scheduleMatch(0);
       } else {
         clearTimeout(this.#matchTimer);
         this.#matchRun += 1;
@@ -169,55 +166,40 @@ export class App {
     if (this.store.state.images.length === images.length) {
       requestAnimationFrame(() => document.getElementById("editor")?.scrollIntoView({ block: "start" }));
     }
-    // New photos are matched to the point already placed by hand.
-    this.#matchFromReference();
+    // New photos are matched to the points already placed by hand.
+    this.#scheduleMatch(0);
   }
 
-  /** The hand-placed photo to match from: the one set most recently, else the first. */
-  #reference(): SourceImage | undefined {
-    const { images } = this.store.state;
-    const latest = images.find((image) => image.id === this.#referenceId);
-    return latest && isManualFocus(latest) ? latest : images.find(isManualFocus);
-  }
-
-  #matchFromReference(): void {
-    const reference = this.#reference();
-    if (reference) {
-      this.#scheduleMatch(reference.id, 0);
-    }
-  }
-
-  #scheduleMatch(referenceId: string, delay: number): void {
+  #scheduleMatch(delay: number): void {
     clearTimeout(this.#matchTimer);
     if (this.#autoMatch) {
-      this.#matchTimer = setTimeout(() => void this.#runMatch(referenceId), delay);
+      this.#matchTimer = setTimeout(() => void this.#runMatch(), delay);
     }
   }
 
   /**
-   * Find the reference's focal point in every photo that hasn't been placed by
-   * hand. Photos without a confident match are left for the user.
+   * Find the hand-placed focal points in every photo that hasn't been placed
+   * by hand, matching each photo against its neighbour (see `planMatches`).
+   * Photos without a confident match are left for the user.
    */
-  async #runMatch(referenceId: string): Promise<void> {
+  async #runMatch(): Promise<void> {
     const { images } = this.store.state;
-    const reference = images.find((image) => image.id === referenceId);
-    if (!reference || !isManualFocus(reference)) {
-      return;
-    }
-    const targets = images.filter((image) => image.id !== referenceId && !isManualFocus(image));
-    if (targets.length === 0) {
+    const plans = planMatches(images);
+    const total = plans.reduce((sum, plan) => sum + plan.targets.length, 0);
+    if (total === 0) {
       return;
     }
     const run = ++this.#matchRun;
-    const focus = reference.focus;
-    this.store.set({ matching: { done: 0, total: targets.length } });
-    let matches: FocusMatch[];
+    this.store.set({ matching: { done: 0, total } });
+    let results: FocusMatch[][];
     try {
-      matches = await matchFocus(
-        reference.bitmap,
-        focus,
-        targets.map((image) => image.bitmap),
-        (done, total) => run === this.#matchRun && this.store.set({ matching: { done, total } }),
+      results = await matchFocus(
+        plans.map((plan) => ({
+          reference: images[plan.start]!.bitmap,
+          focus: images[plan.start]!.focus,
+          targets: plan.targets.map((index) => images[index]!.bitmap),
+        })),
+        (done, count) => run === this.#matchRun && this.store.set({ matching: { done, total: count } }),
       );
     } catch (error) {
       console.error(error);
@@ -231,16 +213,30 @@ export class App {
       return;
     }
 
-    const matchById = new Map(targets.map((image, index) => [image.id, matches[index]!]));
+    // Each photo records the one it was matched against: the last photo before it in its chain that had a point.
+    const matchById = new Map<string, { match: FocusMatch; referenceId: string }>();
+    plans.forEach((plan, p) => {
+      let referenceId = images[plan.start]!.id;
+      plan.targets.forEach((index, t) => {
+        const match = results[p]![t]!;
+        const { id } = images[index]!;
+        matchById.set(id, { match, referenceId });
+        if (match.focus) {
+          referenceId = id;
+        }
+      });
+    });
+    const matches = [...matchById.values()].map((entry) => entry.match);
     const failed: string[] = [];
     this.store.set((state) => ({
       matching: null,
       images: state.images.map((image) => {
-        const match = matchById.get(image.id);
+        const entry = matchById.get(image.id);
         // Skip photos that were removed, or placed by hand while matching ran.
-        if (!match || isManualFocus(image)) {
+        if (!entry || isManualFocus(image)) {
           return image;
         }
+        const { match, referenceId } = entry;
         if (!match.focus) {
           failed.push(image.name);
           // A point matched to an earlier reference point no longer lines up, so ask for it again.
@@ -305,7 +301,6 @@ export class App {
     // Drop any matching still in flight.
     clearTimeout(this.#matchTimer);
     this.#matchRun += 1;
-    this.#referenceId = null;
     this.store.set({ images: [], active: -1, result: null, matching: null });
     window.scrollTo({ top: 0 });
   }

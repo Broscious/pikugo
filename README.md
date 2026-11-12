@@ -117,11 +117,15 @@ Every photo is then drawn so its focal point lands on the frame's shared focal p
 
 ## How auto-match works
 
-When you place a point by hand, every photo you haven't placed by hand is searched for the same spot:
+When you place a point by hand, every photo you haven't placed by hand is searched for the same spot. Photos
+are matched one after another, each against its neighbour, since consecutive shots usually differ least:
+photos after a hand-placed one are matched forward from it (up to the next hand-placed photo), and photos
+before the first hand-placed one are matched backward. If a photo can't be matched, the next one is matched
+against the last photo that was. Each match works like this:
 
 1. Each photo is resized so its longest edge is 1024 px, which puts photos from the same camera at the same
    scale, and converted to greyscale.
-2. A square patch around your point (about 12% of the photo's shorter side) is compared with every position
+2. A square patch around your point (about 6% of the photo's shorter side, between 6 and 64 px) is compared with every position
    in the other photo using **normalized cross-correlation**, which ignores differences in brightness and
    contrast. To keep this fast, the search runs coarse-to-fine: a full scan on a small copy finds a few
    candidates, which are refined on larger copies, and the best one gets a sub-pixel position.

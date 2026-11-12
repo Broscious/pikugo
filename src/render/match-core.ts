@@ -1,5 +1,5 @@
 import type { Point, Size } from "../core/geometry";
-import { grayFromRgba, matchPoint, type GrayImage, type MatchOutcome } from "../core/match";
+import { grayFromRgba, isConfident, matchPoint, type GrayImage, type MatchOutcome } from "../core/match";
 
 /**
  * Photos are resized so their longest edge is this many pixels before
@@ -27,18 +27,44 @@ export function toGray(source: MatchImage, read: PixelReader): GrayImage {
   return grayFromRgba(pixels.data, pixels.width, pixels.height);
 }
 
-/** Match `focus` (in the reference's matching-size pixels) against each target. */
-export function matchAll(
-  reference: MatchImage,
-  focus: Point,
-  targets: readonly MatchImage[],
+/**
+ * A run of photos matched one after another. The first target is matched
+ * against `start`, and each later target against the last photo in the run
+ * that matched confidently. Neighbouring frames usually differ least, so this
+ * finds matches that a single distant reference would miss.
+ */
+export interface MatchChain {
+  /** Index of the photo whose point is known. */
+  start: number;
+  /** The known point, in the start photo's matching-size pixels. */
+  focus: Point;
+  /** Indices of the photos to match, in order. */
+  targets: number[];
+}
+
+/** Run each chain over `images`, returning one outcome per target, per chain. */
+export function matchChains(
+  images: readonly MatchImage[],
+  chains: readonly MatchChain[],
   read: PixelReader,
   onProgress?: (done: number, total: number) => void,
-): MatchOutcome[] {
-  const source = toGray(reference, read);
-  return targets.map((target, index) => {
-    const outcome = matchPoint(source, focus, toGray(target, read));
-    onProgress?.(index + 1, targets.length);
-    return outcome;
+): MatchOutcome[][] {
+  const total = chains.reduce((sum, chain) => sum + chain.targets.length, 0);
+  let done = 0;
+  return chains.map((chain) => {
+    let source = toGray(images[chain.start]!, read);
+    let focus = chain.focus;
+    return chain.targets.map((index) => {
+      const target = toGray(images[index]!, read);
+      const outcome = matchPoint(source, focus, target);
+      // Only a confident match is trusted as the reference for the next photo.
+      if (outcome.ok && isConfident(outcome)) {
+        source = target;
+        focus = outcome.point;
+      }
+      done += 1;
+      onProgress?.(done, total);
+      return outcome;
+    });
   });
 }

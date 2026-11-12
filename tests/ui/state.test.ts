@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_OPTIONS } from "../../src/core/options";
 import { describePreview } from "../../src/ui/preview";
-import { createAppStore, effectiveOptions, signatureOf, tryPlan, type SourceImage } from "../../src/ui/state";
+import { createAppStore, effectiveOptions, planMatches, signatureOf, tryPlan, type SourceImage } from "../../src/ui/state";
 
 function image(id: string, x: number, y: number): SourceImage {
   return { id, name: `${id}.png`, url: "", bitmap: {} as ImageBitmap, width: 100, height: 80, focus: { x, y }, focusSet: true, autoMatch: null };
@@ -63,5 +63,31 @@ describe("describePreview", () => {
     [{ maxEdge: null }, "Original size"],
   ])("describes %j", (patch, text) => {
     expect(describePreview(patch)).toBe(text);
+  });
+});
+
+describe("planMatches", () => {
+  // "m" is placed by hand, "a" was auto-matched, "-" has no point yet.
+  const photos = (kinds: string) =>
+    [...kinds].map((kind, i) => ({
+      ...image(String(i), 10, 10),
+      focusSet: kind !== "-",
+      autoMatch: kind === "a" ? { score: 0.9, referenceId: "x" } : null,
+    }));
+
+  it("needs a hand-placed photo", () => {
+    expect(planMatches(photos("-a-"))).toEqual([]);
+  });
+
+  it("matches outward from the hand-placed photos, each up to the next one", () => {
+    expect(planMatches(photos("-a-m-a"))).toEqual([
+      { start: 3, targets: [2, 1, 0] },
+      { start: 3, targets: [4, 5] },
+    ]);
+    expect(planMatches(photos("m-m--m"))).toEqual([
+      { start: 0, targets: [1] },
+      { start: 2, targets: [3, 4] },
+    ]);
+    expect(planMatches(photos("mm"))).toEqual([]);
   });
 });

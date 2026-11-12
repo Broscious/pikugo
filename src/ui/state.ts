@@ -91,3 +91,35 @@ export function signatureOf(state: Pick<AppState, "images" | "options">): string
 export function isManualFocus(image: SourceImage): boolean {
   return image.focusSet && image.autoMatch === null;
 }
+
+/** Photos (by index) to auto-match in order, starting from a hand-placed one. */
+export interface MatchPlan {
+  start: number;
+  targets: number[];
+}
+
+/**
+ * How to auto-match the photos that weren't placed by hand. Each is matched
+ * against its neighbour rather than one distant photo: photos after a
+ * hand-placed one are matched forward from it, up to the next hand-placed
+ * photo, and photos before the first hand-placed one are matched backward.
+ */
+export function planMatches(images: readonly SourceImage[]): MatchPlan[] {
+  const manual = images.flatMap((image, index) => (isManualFocus(image) ? [index] : []));
+  const first = manual[0];
+  if (first === undefined) {
+    return [];
+  }
+  const range = (from: number, to: number) => Array.from({ length: Math.abs(to - from) + 1 }, (_, i) => from + i * Math.sign(to - from || 1));
+  const plans: MatchPlan[] = [];
+  if (first > 0) {
+    plans.push({ start: first, targets: range(first - 1, 0) });
+  }
+  manual.forEach((start, k) => {
+    const end = manual[k + 1] ?? images.length;
+    if (end - start > 1) {
+      plans.push({ start, targets: range(start + 1, end - 1) });
+    }
+  });
+  return plans;
+}
