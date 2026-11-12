@@ -43,6 +43,12 @@ export interface LayoutOptions {
    * well as it can.
    */
   anchor: Point | null;
+  /**
+   * Frame size chosen by hand, in source pixels. Only used with an anchor; it
+   * is shrunk if needed to fit (crop) and to honour the aspect ratio. Without
+   * it the frame is as large as the edge mode allows.
+   */
+  size?: Size | null;
 }
 
 export interface FrameLayout extends Size {
@@ -184,10 +190,16 @@ export function computeLayout(sources: readonly FrameSource[], options: LayoutOp
   let height: number;
   let focus: Point;
 
+  const size = options.anchor && options.size ? options.size : null;
+
   if (options.edges === "crop") {
     const anchor = normaliseAnchor(options.anchor, 0);
     let spanX = largestSpanInside(shared.left, shared.right, anchor?.x ?? null);
     let spanY = largestSpanInside(shared.top, shared.bottom, anchor?.y ?? null);
+    if (size) {
+      spanX = Math.min(spanX, size.width);
+      spanY = Math.min(spanY, size.height);
+    }
     if (ratio !== null) {
       spanX = Math.min(spanX, spanY * ratio);
       spanY = spanX / ratio;
@@ -202,6 +214,28 @@ export function computeLayout(sources: readonly FrameSource[], options: LayoutOp
     focus = {
       x: placeFocus(width, anchor?.x ?? null, width - shared.right, shared.left, Math.round(width / 2)),
       y: placeFocus(height, anchor?.y ?? null, height - shared.bottom, shared.top, Math.round(height / 2)),
+    };
+  } else if (size && options.anchor) {
+    // A hand-sized frame: it may be smaller than the photos (cropping some of
+    // them) or larger (adding transparent padding). The focal point sits at the
+    // anchor as far as possible while the frame stays inside the photos, or the
+    // photos inside the frame.
+    let spanX = size.width;
+    let spanY = size.height;
+    if (ratio !== null) {
+      spanX = Math.min(spanX, spanY * ratio);
+      spanY = spanX / ratio;
+    }
+    width = Math.max(1, Math.round(spanX));
+    height = Math.max(1, Math.round(spanY));
+    const place = (span: number, anchor: number, before: number, after: number) => {
+      const a = span - after;
+      const b = before;
+      return clamp(clamp(Math.round(anchor * span), Math.min(a, b), Math.max(a, b)), 0, span);
+    };
+    focus = {
+      x: place(width, clamp(options.anchor.x, 0, 1), total.left, total.right),
+      y: place(height, clamp(options.anchor.y, 0, 1), total.top, total.bottom),
     };
   } else {
     const anchor = normaliseAnchor(options.anchor, LAYER_ANCHOR_MARGIN);

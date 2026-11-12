@@ -192,6 +192,10 @@
   font-size: 0.8rem;
 }
 
+.fill-frame {
+  margin-top: 10px;
+}
+
 .field-hint-tip {
   display: flex;
   align-items: flex-start;

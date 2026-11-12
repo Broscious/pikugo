@@ -1,7 +1,6 @@
 import { stillFilename, timestampedFilename } from "../core/format";
 import { STILL_FORMATS, STILL_MATTE } from "../core/options";
 import { createZip } from "../core/zip";
-import type { Point } from "../core/geometry";
 import { encodeWebP, renderStillFrames } from "../render/encoder";
 import { matchFocus, type FocusMatch } from "../render/matcher";
 import { byId } from "./dom";
@@ -43,7 +42,7 @@ export class App {
       clear: () => this.#clear(),
     });
     this.#options = new OptionsPanel(this.store);
-    new Preview(this.store, (anchor: Point) => this.#options.update({ anchor }));
+    new Preview(this.store, (patch) => this.#options.update(patch));
     new Summary(this.store);
     new Stepper(this.store);
     new ResultView(this.store);

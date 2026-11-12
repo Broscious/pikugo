@@ -770,6 +770,22 @@ main {
   cursor: grabbing;
 }
 
+.preview-stage[data-cursor="ew-resize"] {
+  cursor: ew-resize;
+}
+
+.preview-stage[data-cursor="ns-resize"] {
+  cursor: ns-resize;
+}
+
+.preview-stage[data-cursor="nwse-resize"] {
+  cursor: nwse-resize;
+}
+
+.preview-stage[data-cursor="nesw-resize"] {
+  cursor: nesw-resize;
+}
+
 .preview-badge {
   position: absolute;
   left: 12px;

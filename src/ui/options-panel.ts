@@ -67,6 +67,7 @@ export class OptionsPanel {
   readonly #anchorY = byId("anchorY", HTMLInputElement);
   readonly #anchorXOut = byId("anchorXOut", HTMLOutputElement);
   readonly #anchorYOut = byId("anchorYOut", HTMLOutputElement);
+  readonly #fillFrame = byId("fillFrameBtn", HTMLButtonElement);
   readonly #sizePresets = byId("sizePresets", HTMLDivElement);
   readonly #quality = byId("qualityRange", HTMLInputElement);
   readonly #qualityOut = byId("qualityOut", HTMLOutputElement);
@@ -209,7 +210,8 @@ export class OptionsPanel {
       case "stillFormat":
         return { stillFormat: parseStillFormat(value) };
       case "anchorMode":
-        return { anchor: value === "fixed" ? (this.#store.state.options.anchor ?? this.#currentAnchor()) : null };
+        // Auto always uses the largest frame, so it drops any size set by hand.
+        return value === "fixed" ? { anchor: this.#store.state.options.anchor ?? this.#currentAnchor() } : { anchor: null, frameSize: null };
       default:
         return {};
     }
@@ -311,6 +313,9 @@ export class OptionsPanel {
     this.#anchorX.addEventListener("input", setAnchorFromSliders);
     this.#anchorY.addEventListener("input", setAnchorFromSliders);
 
+    this.#fillFrame.addEventListener("click", () => this.update({ frameSize: null }));
+    this.#previewOnHover(this.#fillFrame, () => ({ frameSize: null }));
+
     this.#quality.addEventListener("input", () => this.update({ quality: Number(this.#quality.value) / 100 }));
     byId("resetOptionsBtn", HTMLButtonElement).addEventListener("click", () => {
       this.#aspectCustom.value = "";
@@ -359,6 +364,7 @@ export class OptionsPanel {
 
     const anchor = options.anchor ?? this.#lastAnchor;
     this.#anchorControls.dataset.disabled = String(options.anchor === null);
+    this.#fillFrame.hidden = options.anchor === null || options.frameSize === null;
     setRange(this.#anchorX, Math.round(anchor.x * 100));
     setRange(this.#anchorY, Math.round(anchor.y * 100));
     this.#anchorXOut.textContent = `${Math.round(anchor.x * 100)}%`;

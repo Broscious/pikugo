@@ -48,6 +48,7 @@ describe("sanitizeOptions", () => {
       edges: "layer",
       aspect: "4:5",
       anchor: { x: 0.25, y: 0.75 },
+      frameSize: { width: 640, height: 480 },
       maxEdge: null,
       quality: 0.5,
       stillFormat: "jpeg",
@@ -72,6 +73,7 @@ describe("sanitizeOptions", () => {
       edges: "crop",
       aspect: "free",
       anchor: { x: 1, y: 0 },
+      frameSize: null,
       maxEdge: DEFAULT_OPTIONS.maxEdge,
       quality: 1,
       stillFormat: "png",
@@ -82,12 +84,26 @@ describe("sanitizeOptions", () => {
   it("drops incomplete anchors", () => {
     expect(sanitizeOptions({ anchor: { x: 0.5 } }).anchor).toBeNull();
   });
+
+  it("only keeps a valid frame size alongside an anchor", () => {
+    const anchor = { x: 0.5, y: 0.5 };
+    expect(sanitizeOptions({ frameSize: { width: 100, height: 80 } }).frameSize).toBeNull();
+    expect(sanitizeOptions({ anchor, frameSize: { width: 0, height: 80 } }).frameSize).toBeNull();
+    expect(sanitizeOptions({ anchor, frameSize: { width: 100 } }).frameSize).toBeNull();
+    expect(sanitizeOptions({ anchor, frameSize: { width: 100, height: 80 } }).frameSize).toEqual({ width: 100, height: 80 });
+  });
 });
 
 describe("layoutOptionsFrom", () => {
   it("converts the aspect text to a ratio", () => {
     expect(layoutOptionsFrom({ ...DEFAULT_OPTIONS, aspect: "2:1" }).aspectRatio).toBe(2);
     expect(layoutOptionsFrom({ ...DEFAULT_OPTIONS, aspect: "bad" }).aspectRatio).toBeNull();
+  });
+
+  it("passes the frame size on only with a fixed anchor", () => {
+    const frameSize = { width: 100, height: 80 };
+    expect(layoutOptionsFrom({ ...DEFAULT_OPTIONS, frameSize }).size).toBeNull();
+    expect(layoutOptionsFrom({ ...DEFAULT_OPTIONS, anchor: { x: 0.5, y: 0.5 }, frameSize }).size).toEqual(frameSize);
   });
 });
 

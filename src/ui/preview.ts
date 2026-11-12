@@ -1,5 +1,6 @@
+import { framingOf, moveFrame, resizeFrame, unionRect, type Handle } from "../core/frame-edit";
 import type { Point, Rect } from "../core/geometry";
-import { PLAYBACK_LABELS, type AnimationOptions } from "../core/options";
+import { PLAYBACK_LABELS, layoutOptionsFrom, type AnimationOptions } from "../core/options";
 import { byId, prefersReducedMotion } from "./dom";
 import { effectiveOptions, tryPlan, type AppState, type AppStore, type PlanResult } from "./state";
 
@@ -18,13 +19,42 @@ interface View {
   offsetY: number;
 }
 
+/** Changes to the framing made in the preview. */
+export type FramingPatch = Pick<AnimationOptions, "anchor"> & Partial<Pick<AnimationOptions, "frameSize">>;
+
+/** The output frame and the area it may cover, in focus space. */
+interface FrameGeometry {
+  frame: Rect;
+  bounds: Rect;
+  ratio: number | null;
+}
+
 interface Drag {
   pointerId: number;
   start: Point;
+  /** The edge or corner being dragged, or null when moving the whole frame. */
+  handle: Handle | null;
   startAnchor: Point;
-  frameWidth: number;
-  frameHeight: number;
+  geometry: FrameGeometry;
+  /** Whether the frame has a size set by hand, which moving keeps. */
+  sized: boolean;
   scale: number;
+}
+
+/** How close (in CSS pixels) the pointer must be to an edge to grab it. */
+const EDGE_GRAB = { mouse: 8, touch: 16 };
+
+function cursorFor(hit: Handle | "move" | null): string {
+  if (hit === null) {
+    return "";
+  }
+  if (hit === "move") {
+    return "move";
+  }
+  if (hit.x !== 0 && hit.y !== 0) {
+    return hit.x === hit.y ? "nwse-resize" : "nesw-resize";
+  }
+  return hit.x !== 0 ? "ew-resize" : "ns-resize";
 }
 
 const SNAP_POINTS = [0, 1 / 3, 0.5, 2 / 3, 1];
@@ -68,6 +98,9 @@ export function describePreview(patch: Partial<AnimationOptions>): string {
   if (patch.aspect !== undefined) {
     return patch.aspect === "free" ? "Free aspect ratio" : `Aspect ${patch.aspect}`;
   }
+  if ("frameSize" in patch && !("anchor" in patch)) {
+    return "Fill available space";
+  }
   if ("anchor" in patch) {
     return patch.anchor ? `Focus at ${Math.round(patch.anchor.x * 100)}%, ${Math.round(patch.anchor.y * 100)}%` : "Automatic focus position";
   }
@@ -90,7 +123,7 @@ export function describePreview(patch: Partial<AnimationOptions>): string {
  */
 export class Preview {
   readonly #store: AppStore;
-  readonly #onAnchor: (anchor: Point) => void;
+  readonly #onFraming: (patch: FramingPatch) => void;
   readonly #stage = byId("previewStage", HTMLDivElement);
   readonly #canvas = byId("previewCanvas", HTMLCanvasElement);
   readonly #badge = byId("previewBadge", HTMLSpanElement);
@@ -118,9 +151,13 @@ export class Preview {
   #checker: CanvasPattern | null = null;
   #raf = 0;
 
-  constructor(store: AppStore, onAnchor: (anchor: Point) => void) {
+  /**
+   * @param onFraming Called when the frame is moved or resized in the preview,
+   *   or nudged with the arrow keys.
+   */
+  constructor(store: AppStore, onFraming: (patch: FramingPatch) => void) {
     this.#store = store;
-    this.#onAnchor = onAnchor;
+    this.#onFraming = onFraming;
     this.#context = this.#canvas.getContext("2d");
     this.#canvas.tabIndex = 0;
     store.subscribe((state, previous) => {
@@ -199,9 +236,18 @@ export class Preview {
       }
       event.preventDefault();
       const step = event.shiftKey ? 0.1 : 0.01;
-      this.#onAnchor({
-        x: Math.min(1, Math.max(0, Math.round((anchor.x + move.x * step) * 100) / 100)),
-        y: Math.min(1, Math.max(0, Math.round((anchor.y + move.y * step) * 100) / 100)),
+      const geometry = this.#frameGeometry();
+      if (geometry && this.#hasFrameSize()) {
+        const { frame, bounds } = geometry;
+        // The arrows move the subject within the frame, so the frame moves the other way.
+        this.#onFraming(framingOf(moveFrame(frame, { x: -move.x * step * frame.width, y: -move.y * step * frame.height }, bounds)));
+        return;
+      }
+      this.#onFraming({
+        anchor: {
+          x: Math.min(1, Math.max(0, Math.round((anchor.x + move.x * step) * 100) / 100)),
+          y: Math.min(1, Math.max(0, Math.round((anchor.y + move.y * step) * 100) / 100)),
+        },
       });
     });
   }
@@ -232,6 +278,26 @@ export class Preview {
     return this.#store.state.options.anchor ?? { x: plan.layout.focus.x / plan.layout.width, y: plan.layout.focus.y / plan.layout.height };
   }
 
+  /** Whether the frame has a size set by hand (rather than being as large as possible). */
+  #hasFrameSize(): boolean {
+    const { options } = this.#store.state;
+    return options.anchor !== null && options.frameSize !== null;
+  }
+
+  #frameGeometry(): FrameGeometry | null {
+    const { plan } = this.#plan;
+    if (!plan) {
+      return null;
+    }
+    const { layout } = plan;
+    const options = effectiveOptions(this.#store.state);
+    const frame: Rect = { x: -layout.focus.x, y: -layout.focus.y, width: layout.width, height: layout.height };
+    // Cropping keeps the frame within the photos' overlap; layering lets it cover any photo.
+    const area = options.edges === "crop" ? layout.intersection : layout.union;
+    const region: Rect = { ...area, x: area.x - layout.focus.x, y: area.y - layout.focus.y };
+    return { frame, bounds: unionRect(region, frame), ratio: layoutOptionsFrom(options).aspectRatio };
+  }
+
   #toCanvas(point: Point): Point {
     return { x: this.#view.offsetX + point.x * this.#view.scale, y: this.#view.offsetY + point.y * this.#view.scale };
   }
@@ -241,57 +307,97 @@ export class Preview {
     return { x: origin.x, y: origin.y, width: rect.width * this.#view.scale, height: rect.height * this.#view.scale };
   }
 
-  #pointerOnFrame(event: PointerEvent): boolean {
+  /** What the pointer would grab: an edge or corner of the frame, the frame itself, or nothing. */
+  #hitTest(event: PointerEvent): Handle | "move" | null {
     if (!this.#frame) {
-      return false;
+      return null;
     }
     const bounds = this.#canvas.getBoundingClientRect();
     const frame = this.#canvasRect(this.#frame);
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
-    return x >= frame.x && y >= frame.y && x <= frame.x + frame.width && y <= frame.y + frame.height;
+    const grab = event.pointerType === "mouse" ? EDGE_GRAB.mouse : EDGE_GRAB.touch;
+    const right = frame.x + frame.width;
+    const bottom = frame.y + frame.height;
+    if (x < frame.x - grab || x > right + grab || y < frame.y - grab || y > bottom + grab) {
+      return null;
+    }
+    const handle: Handle = {
+      x: Math.abs(x - frame.x) <= grab ? -1 : Math.abs(x - right) <= grab ? 1 : 0,
+      y: Math.abs(y - frame.y) <= grab ? -1 : Math.abs(y - bottom) <= grab ? 1 : 0,
+    };
+    if (handle.x !== 0 || handle.y !== 0) {
+      return handle;
+    }
+    return x >= frame.x && y >= frame.y && x <= right && y <= bottom ? "move" : null;
   }
 
   #onPointerDown = (event: PointerEvent) => {
-    const { plan } = this.#plan;
     const anchor = this.#currentAnchor();
-    if (!plan || !anchor || !this.#pointerOnFrame(event)) {
+    const geometry = this.#frameGeometry();
+    const hit = this.#hitTest(event);
+    if (!anchor || !geometry || !hit) {
       return;
     }
     event.preventDefault();
     this.#canvas.setPointerCapture(event.pointerId);
+    const handle = hit === "move" ? null : hit;
     this.#drag = {
       pointerId: event.pointerId,
       start: { x: event.clientX, y: event.clientY },
+      handle,
       startAnchor: anchor,
-      frameWidth: plan.layout.width,
-      frameHeight: plan.layout.height,
+      geometry,
+      sized: this.#hasFrameSize(),
       scale: this.#view.scale,
     };
-    this.#stage.dataset.cursor = "grabbing";
+    this.#stage.dataset.cursor = handle ? cursorFor(handle) : "grabbing";
   };
 
   #onPointerMove = (event: PointerEvent) => {
     const drag = this.#drag;
     if (!drag || drag.pointerId !== event.pointerId) {
       if (this.#plan.plan) {
-        this.#stage.dataset.cursor = this.#pointerOnFrame(event) ? "move" : "";
+        this.#stage.dataset.cursor = cursorFor(this.#hitTest(event));
       }
       return;
     }
-    // Moving the frame right moves the subject left within it.
     const dx = (event.clientX - drag.start.x) / drag.scale;
     const dy = (event.clientY - drag.start.y) / drag.scale;
-    this.#onAnchor({
-      x: snap(Math.min(1, Math.max(0, drag.startAnchor.x - dx / drag.frameWidth))),
-      y: snap(Math.min(1, Math.max(0, drag.startAnchor.y - dy / drag.frameHeight))),
+    const { frame, bounds, ratio } = drag.geometry;
+
+    if (drag.handle) {
+      // Where the dragged edges are now, in focus space.
+      const pointer = {
+        x: (drag.handle.x === 1 ? frame.x + frame.width : frame.x) + dx,
+        y: (drag.handle.y === 1 ? frame.y + frame.height : frame.y) + dy,
+      };
+      this.#onFraming(framingOf(resizeFrame(frame, drag.handle, pointer, bounds, ratio)));
+      return;
+    }
+
+    if (drag.sized) {
+      // A frame sized by hand moves freely within the area it may cover, snapping the subject to the thirds.
+      const moved = framingOf(moveFrame(frame, { x: dx, y: dy }, bounds));
+      const anchor = { x: snap(moved.anchor.x), y: snap(moved.anchor.y) };
+      const snapped = { ...frame, x: -anchor.x * frame.width, y: -anchor.y * frame.height };
+      this.#onFraming(framingOf(moveFrame(snapped, { x: 0, y: 0 }, bounds)));
+      return;
+    }
+
+    // Otherwise the frame stays as large as possible: moving it right moves the subject left within it.
+    this.#onFraming({
+      anchor: {
+        x: snap(Math.min(1, Math.max(0, drag.startAnchor.x - dx / frame.width))),
+        y: snap(Math.min(1, Math.max(0, drag.startAnchor.y - dy / frame.height))),
+      },
     });
   };
 
   #onPointerUp = (event: PointerEvent) => {
     if (this.#drag?.pointerId === event.pointerId) {
       this.#drag = null;
-      this.#stage.dataset.cursor = "move";
+      this.#stage.dataset.cursor = cursorFor(this.#hitTest(event));
     }
   };
 
@@ -361,7 +467,8 @@ export class Preview {
 
     const ease = prefersReducedMotion() || !this.#frame ? 1 : 1 - Math.exp(-elapsed / 70);
     this.#frame = this.#frame ? lerpRect(this.#frame, targetFrame, ease) : targetFrame;
-    this.#world = this.#world && !this.#drag ? lerpRect(this.#world, targetWorld, ease) : targetWorld;
+    // Hold the view still while dragging, so whatever is being dragged stays under the pointer.
+    this.#world = this.#drag ? (this.#world ?? targetWorld) : this.#world ? lerpRect(this.#world, targetWorld, ease) : targetWorld;
     const settled = rectsClose(this.#frame, targetFrame, 0.5) && rectsClose(this.#world, targetWorld, 0.5);
     if (settled) {
       this.#frame = targetFrame;
@@ -481,6 +588,20 @@ export class Preview {
       context.lineTo(cx, cy + dy * corner);
       context.stroke();
     }
+    // Edge handles: drag a side to resize the frame.
+    const tick = Math.min(12, frame.width / 6, frame.height / 6);
+    const midX = frame.x + frame.width / 2;
+    const midY = frame.y + frame.height / 2;
+    context.beginPath();
+    for (const y of [frame.y, frame.y + frame.height]) {
+      context.moveTo(midX - tick, y);
+      context.lineTo(midX + tick, y);
+    }
+    for (const x of [frame.x, frame.x + frame.width]) {
+      context.moveTo(x, midY - tick);
+      context.lineTo(x, midY + tick);
+    }
+    context.stroke();
     context.restore();
 
     this.#drawLabel(context, `${plan.output.width} × ${plan.output.height}`, frame.x + 8, frame.y + 8, theme.accent);

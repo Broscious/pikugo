@@ -157,6 +157,31 @@ describe("computeLayout – crop", () => {
     const layout = computeLayout([source(100, 100, 150, -10)], crop);
     expect(layout.focus).toEqual({ x: 100, y: 0 });
   });
+
+  // 100px left of the focus, 200 right, 50 above, 150 below.
+  const sized = [source(300, 200, 100, 50)];
+  const centred = { x: 0.5, y: 0.5 };
+
+  it("uses a frame size chosen by hand, so the frame needn't touch the edges", () => {
+    const layout = computeLayout(sized, { ...crop, anchor: centred, size: { width: 100, height: 80 } });
+    expect(layout).toMatchObject({ width: 100, height: 80, focus: { x: 50, y: 40 } });
+    expectCovered(layout);
+  });
+
+  it("shrinks a hand-chosen size that doesn't fit", () => {
+    const layout = computeLayout(sized, { ...crop, anchor: centred, size: { width: 1000, height: 1000 } });
+    expect(layout).toMatchObject({ width: 200, height: 100 });
+    expectCovered(layout);
+  });
+
+  it("fits a hand-chosen size to the aspect ratio", () => {
+    const layout = computeLayout(sized, { ...crop, aspectRatio: 1, anchor: centred, size: { width: 150, height: 80 } });
+    expect(layout).toMatchObject({ width: 80, height: 80 });
+  });
+
+  it("ignores the size without an anchor", () => {
+    expect(computeLayout(sized, { ...crop, size: { width: 100, height: 80 } })).toEqual(computeLayout(sized, crop));
+  });
 });
 
 describe("computeLayout – layer", () => {
@@ -190,6 +215,18 @@ describe("computeLayout – layer", () => {
     const layout = computeLayout([source(100, 100, 50, 50)], { ...layer, anchor: { x: 0.25, y: 0.5 } });
     // Right needs 50 / 0.75 ≈ 66.7 → 67; left needs 50 / 0.25 = 200.
     expect(layout).toMatchObject({ width: 200, height: 100, focus: { x: 50, y: 50 } });
+    expectContained(layout);
+  });
+
+  it("crops to a hand-chosen size smaller than the photos", () => {
+    const layout = computeLayout([source(300, 200, 100, 50)], { ...layer, anchor: { x: 0.5, y: 0.5 }, size: { width: 100, height: 80 } });
+    expect(layout).toMatchObject({ width: 100, height: 80, focus: { x: 50, y: 40 } });
+    expectCovered(layout);
+  });
+
+  it("pads to a hand-chosen size larger than the photos, keeping them all in frame", () => {
+    const layout = computeLayout([source(300, 200, 100, 50)], { ...layer, anchor: { x: 0.5, y: 0.5 }, size: { width: 400, height: 300 } });
+    expect(layout).toMatchObject({ width: 400, height: 300 });
     expectContained(layout);
   });
 

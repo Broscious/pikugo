@@ -1,4 +1,4 @@
-import { clamp, type EdgeMode, type LayoutOptions, type Point } from "./geometry";
+import { clamp, type EdgeMode, type LayoutOptions, type Point, type Size } from "./geometry";
 
 /**
  * - loop: 0 1 2 3 | 0 1 2 3
@@ -29,6 +29,11 @@ export interface AnimationOptions {
   aspect: string;
   /** Fixed focal-point position as fractions of the frame, or null for automatic. */
   anchor: Point | null;
+  /**
+   * Frame size set by resizing the frame in the preview, in source pixels.
+   * Only used with a fixed anchor; null makes the frame as large as possible.
+   */
+  frameSize: Size | null;
   /** Longest output edge in pixels, or null to keep the source resolution. */
   maxEdge: number | null;
   /** Lossy encoder quality, 0..1. Also used for JPEG and WebP stills. */
@@ -94,6 +99,7 @@ export const DEFAULT_OPTIONS: Readonly<AnimationOptions> = Object.freeze({
   edges: "crop",
   aspect: "free",
   anchor: null,
+  frameSize: null,
   maxEdge: 1080,
   quality: 0.85,
   stillFormat: "png",
@@ -141,6 +147,7 @@ export function layoutOptionsFrom(options: AnimationOptions): LayoutOptions {
     edges: options.edges,
     aspectRatio: parseAspectRatio(options.aspect) ?? null,
     anchor: options.anchor,
+    size: options.anchor ? options.frameSize : null,
   };
 }
 
@@ -167,12 +174,21 @@ export function sanitizeOptions(input: unknown): AnimationOptions {
       anchor = { x: clamp(x, 0, 1), y: clamp(y, 0, 1) };
     }
   }
+  let frameSize: Size | null = null;
+  if (anchor && isRecord(raw.frameSize)) {
+    const width = finite(raw.frameSize.width);
+    const height = finite(raw.frameSize.height);
+    if (width !== undefined && height !== undefined && width >= 1 && height >= 1) {
+      frameSize = { width, height };
+    }
+  }
   return {
     frameDelay: delay === undefined ? DEFAULT_OPTIONS.frameDelay : Math.round(clamp(delay, FRAME_DELAY_MIN, FRAME_DELAY_MAX)),
     playback: parsePlayback(raw.playback),
     edges: raw.edges === "layer" ? "layer" : "crop",
     aspect,
     anchor,
+    frameSize,
     maxEdge: raw.maxEdge === null ? null : maxEdge !== undefined && maxEdge >= 16 ? Math.round(maxEdge) : DEFAULT_OPTIONS.maxEdge,
     quality: quality === undefined ? DEFAULT_OPTIONS.quality : clamp(quality, 0.05, 1),
     stillFormat: parseStillFormat(raw.stillFormat),

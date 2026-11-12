@@ -191,6 +191,85 @@ test("dragging the preview frame pins the focus position", async ({ page }) => {
   await expect(page.getByRole("radio", { name: "Fixed" })).toHaveAttribute("aria-checked", "true");
 });
 
+/** Walk the pointer from `from` in steps of `step` until the preview shows `cursor`, and return that point. */
+async function findCursor(page: Page, from: { x: number; y: number }, step: { x: number; y: number }, cursor: string) {
+  for (let i = 0; i < 400; i += 1) {
+    const point = { x: from.x + step.x * i, y: from.y + step.y * i };
+    await page.mouse.move(point.x, point.y);
+    if ((await page.locator("#previewStage").getAttribute("data-cursor")) === cursor) {
+      return point;
+    }
+  }
+  throw new Error(`No ${cursor} cursor found`);
+}
+
+/** Scroll the preview into view and return its centre. */
+async function previewCentre(page: Page) {
+  const canvas = page.locator("#previewCanvas");
+  await canvas.scrollIntoViewIfNeeded();
+  const box = (await canvas.boundingBox())!;
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+async function drag(page: Page, from: { x: number; y: number }, by: { x: number; y: number }) {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + by.x, from.y + by.y, { steps: 6 });
+  await page.mouse.up();
+}
+
+test("the preview frame can be resized by its edges and moved without touching an edge", async ({ page }) => {
+  await loadSamples(page);
+  await page.getByRole("button", { name: "Pause preview" }).click();
+  const full = inspectAnimation(await generate(page));
+  let centre = await previewCentre(page);
+
+  // Free aspect ratio: dragging the right edge in narrows the frame and leaves its height alone.
+  const right = await findCursor(page, centre, { x: 2, y: 0 }, "ew-resize");
+  await drag(page, right, { x: -60, y: 0 });
+  await expect(page.getByRole("radio", { name: "Fixed" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#fillFrameBtn")).toBeVisible();
+  const narrowed = inspectAnimation(await generate(page));
+  expect(narrowed.width).toBeLessThan(full.width - 20);
+  expect(narrowed.height).toBe(full.height);
+
+  // Moving a resized frame keeps its size, rather than growing back to touch an edge.
+  centre = await previewCentre(page);
+  await drag(page, centre, { x: -20, y: 0 });
+  const moved = inspectAnimation(await generate(page));
+  expect(moved).toMatchObject({ width: narrowed.width, height: narrowed.height });
+
+  // Dragging a corner moves both of its sides.
+  centre = await previewCentre(page);
+  const rightEdge = await findCursor(page, centre, { x: 2, y: 0 }, "ew-resize");
+  const corner = await findCursor(page, rightEdge, { x: 0, y: 2 }, "nwse-resize");
+  await drag(page, corner, { x: -30, y: -30 });
+  const cornered = inspectAnimation(await generate(page));
+  expect(cornered.width).toBeLessThan(narrowed.width);
+  expect(cornered.height).toBeLessThan(narrowed.height);
+
+  // A fixed aspect ratio is kept while resizing: the matching edge follows.
+  await page.getByRole("radio", { name: "1:1" }).click();
+  const square = inspectAnimation(await generate(page));
+  expect(Math.abs(square.width - square.height)).toBeLessThanOrEqual(1);
+  centre = await previewCentre(page);
+  const edge = await findCursor(page, centre, { x: 0, y: -2 }, "ns-resize");
+  await drag(page, edge, { x: 0, y: 20 });
+  const smaller = inspectAnimation(await generate(page));
+  expect(Math.abs(smaller.width - smaller.height)).toBeLessThanOrEqual(1);
+  expect(smaller.width).toBeLessThan(square.width);
+
+  // "Fill available space" goes back to the largest frame.
+  await page.getByRole("radio", { name: "Free" }).click();
+  await page.locator("#fillFrameBtn").click();
+  await expect(page.locator("#fillFrameBtn")).toBeHidden();
+  const filled = inspectAnimation(await generate(page));
+  // The largest frame for where the subject now sits: at least as big as before, and bigger overall.
+  expect(filled.width).toBeGreaterThanOrEqual(smaller.width);
+  expect(filled.height).toBeGreaterThanOrEqual(smaller.height);
+  expect(filled.width * filled.height).toBeGreaterThan(smaller.width * smaller.height);
+});
+
 test("hovering an option previews it without applying it", async ({ page }) => {
   await loadSamples(page);
   await page.getByRole("radio", { name: /Layer with transparency/ }).hover();

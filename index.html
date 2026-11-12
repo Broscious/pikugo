@@ -270,7 +270,10 @@
                   <label class="slider-row"><span>Y</span><input id="anchorY" class="range" type="range" min="0" max="100" step="1" /><output id="anchorYOut"></output></label>
                 </div>
               </div>
-              <p class="field-hint">Auto centres the subject as far as the photos allow. Fixed keeps it at the same spot in the frame. You can also drag the frame in the preview.</p>
+              <button id="fillFrameBtn" class="button button-quiet fill-frame" type="button" hidden>
+                <span class="icon i-resize" aria-hidden="true"></span> Fill available space
+              </button>
+              <p class="field-hint">Auto centres the subject as far as the photos allow. Fixed keeps it at the same spot in the frame. In the preview, drag the frame to move it, or drag an edge or corner to resize it.</p>
             </div>
           </fieldset>
 
