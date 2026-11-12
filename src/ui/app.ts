@@ -149,7 +149,7 @@ export class App {
   async #loadSamples(): Promise<void> {
     try {
       this.#append(await createSampleImages());
-      toast("Sample photos loaded. Their focus points are already set. Try the framing options!", "success");
+      toast("Sample photos loaded. They were taken from points along a line, so the scene shifts around the subject. Try the framing and playback options!", "success");
     } catch (error) {
       toast(error instanceof Error ? error.message : String(error), "error");
     }
