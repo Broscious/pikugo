@@ -419,7 +419,10 @@ export class OptionsPanel {
     this.#delayHint.textContent = `${formatFps(options.frameDelay)} · ${formatMilliseconds(loopLength)} per loop`;
 
     this.#anchorControls.dataset.disabled = String(options.anchor === null);
-    this.#fillFrame.hidden = options.anchor === null || options.frameSize === null;
+    // Shown whenever the framing is fixed; it only has work to do once the frame has been resized.
+    this.#fillFrame.hidden = options.anchor === null;
+    this.#fillFrame.disabled = options.frameSize === null;
+    this.#fillFrame.title = options.frameSize === null ? "The frame already fills the available space" : "Make the frame as large as the photos allow";
     this.#renderFrameSize();
     for (const button of this.#anchorGrid.querySelectorAll<HTMLButtonElement>("button")) {
       const pressed = options.anchor !== null && Number(button.dataset.x) === options.anchor.x && Number(button.dataset.y) === options.anchor.y;

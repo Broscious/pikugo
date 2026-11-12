@@ -161,8 +161,11 @@ test("layer mode keeps every pixel and writes transparency", async ({ page }) =>
 test("fixed focus position changes the framing", async ({ page }) => {
   await loadSamples(page);
   const auto = inspectAnimation(await generate(page));
+  await expect(page.locator("#fillFrameBtn")).toBeHidden();
   await page.getByRole("radio", { name: "Fixed" }).click();
   // Grid corners snap to where the rule-of-thirds lines cross.
+  await expect(page.locator("#fillFrameBtn")).toBeVisible();
+  await expect(page.locator("#fillFrameBtn")).toBeDisabled();
   await page.getByRole("button", { name: "Top left intersection" }).click();
   await expect(page.getByRole("button", { name: "Top left intersection" })).toHaveAttribute("aria-pressed", "true");
   const info = inspectAnimation(await generate(page));
@@ -252,7 +255,7 @@ test("the preview frame can be resized by its edges and moved without touching a
   const right = await findCursor(page, centre, { x: 2, y: 0 }, "ew-resize");
   await drag(page, right, { x: -60, y: 0 });
   await expect(page.getByRole("radio", { name: "Fixed" })).toHaveAttribute("aria-checked", "true");
-  await expect(page.locator("#fillFrameBtn")).toBeVisible();
+  await expect(page.locator("#fillFrameBtn")).toBeEnabled();
   const narrowed = inspectAnimation(await generate(page));
   expect(narrowed.width).toBeLessThan(full.width - 20);
   expect(narrowed.height).toBe(full.height);
@@ -286,7 +289,9 @@ test("the preview frame can be resized by its edges and moved without touching a
   // "Fill available space" goes back to the largest frame.
   await page.getByRole("radio", { name: "Free" }).click();
   await page.locator("#fillFrameBtn").click();
-  await expect(page.locator("#fillFrameBtn")).toBeHidden();
+  // Still shown while the framing is fixed, but there's nothing more to fill.
+  await expect(page.locator("#fillFrameBtn")).toBeVisible();
+  await expect(page.locator("#fillFrameBtn")).toBeDisabled();
   const filled = inspectAnimation(await generate(page));
   // The largest frame for where the subject now sits: at least as big as before, and bigger overall.
   expect(filled.width).toBeGreaterThanOrEqual(smaller.width);
