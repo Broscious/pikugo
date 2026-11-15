@@ -1,30 +1,67 @@
 name: CI & Pages
 
+# - Pull requests: typecheck, test and build (no deploy).
+# - main/master: runs after the "Bump version" workflow (version.yml) finishes,
+#   on the branch's latest commit, which includes the version bump, and then
+#   publishes it to GitHub Pages. It also makes sure the version is tagged and
+#   publishes a GitHub Release for it with the built site as pikugo-vX.Y.Z.zip.
+#   A push to main therefore goes:
+#   push → Bump version → CI & Pages → deploy + release.
+# - Manual runs (workflow_dispatch) build and deploy the selected branch.
+
 on:
-  push:
-    branches: [main, master]
   pull_request:
+  workflow_run:
+    workflows: ["Bump version"]
+    types: [completed]
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # One run per branch; a newer run supersedes an older one.
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     name: Typecheck, test & build
+    # After a bump, only continue if the bump succeeded (a skipped bump counts as success).
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      sha: ${{ steps.meta.outputs.sha }}
+      publish: ${{ steps.meta.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          # After a bump, build the branch's latest commit (the bump commit) rather than
+          # the commit that triggered the bump. Otherwise, the default for the event.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
 
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
+
+      - name: Read the version being built
+        id: meta
+        env:
+          # Only the default branch is published (deployed and released): after its
+          # version bump, or when run by hand on it.
+          PUBLISH: >-
+            ${{
+              (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == github.event.repository.default_branch) ||
+              (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch)
+            }}
+        run: |
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
 
       - run: npm ci
 
@@ -53,17 +90,20 @@ jobs:
             test-results/
           retention-days: 7
 
-      - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v5
+      # Only release builds are kept, for the deploy and release jobs. The permanent
+      # copy is the zip attached to the release.
+      - name: Keep the build for publishing
+        if: steps.meta.outputs.publish == 'true'
+        uses: actions/upload-artifact@v7
         with:
+          name: dist
           path: dist
+          retention-days: 1
 
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    # Only the default branch is published.
-    if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+    if: needs.build.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -72,5 +112,60 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist
+
+      # deploy-pages only publishes an artifact from this run named "github-pages",
+      # so the build is packed into one here, right before it's deployed.
+      - name: Package for Pages
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  release:
+    name: Publish versioned release
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.build.outputs.version }}
+      SHA: ${{ needs.build.outputs.sha }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist
+
+      - name: Make sure the version is tagged
+        # The bump workflow normally pushes the tag; add it at the built commit if it's missing.
+        run: |
+          if gh api "repos/$GH_REPO/git/ref/tags/v$VERSION" --silent 2>/dev/null; then
+            echo "Tag v$VERSION already exists."
+          else
+            gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$SHA" --silent
+            echo "Created tag v$VERSION at $SHA."
+          fi
+
+      - name: Publish the release
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            # Nothing new to publish, e.g. after a [skip version] push or a manual re-run.
+            echo "Release v$VERSION already exists, so it was left as it is." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          (cd dist && zip -qr "../pikugo-v$VERSION.zip" .)
+          gh release create "v$VERSION" "pikugo-v$VERSION.zip" \
+            --verify-tag \
+            --title "v$VERSION" \
+            --generate-notes
+          echo "Published release **v$VERSION** with \`pikugo-v$VERSION.zip\`." >> "$GITHUB_STEP_SUMMARY"

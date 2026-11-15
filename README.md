@@ -153,10 +153,27 @@ it isn't designed for photos that are rotated or zoomed relative to each other.
 
 ## Deployment
 
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs on every push and pull request:
-typecheck → unit tests with coverage → build → Playwright tests. Pushes to the repository's default branch
-then publish `dist/` to GitHub Pages.
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs typecheck → unit tests with coverage →
+build → Playwright tests. On pull requests it stops there. On `main`/`master` it runs once the version bump
+(below) has finished, builds the branch's latest commit, which includes the new version, and publishes `dist/`
+to GitHub Pages if that branch is the repository's default. So a push goes: **Bump version → CI & Pages →
+deploy**. If the bump fails, nothing is deployed. It can also be run by hand from the Actions tab.
+
+Each deploy also publishes a **GitHub Release** for the version, with the built site attached as
+`pikugo-vX.Y.Z.zip` (a static site you can host anywhere) and release notes generated from the merged pull
+requests. It makes sure the `vX.Y.Z` tag exists first, adding it at the built commit if the bump didn't. If a
+release for that version already exists (for example after a `[skip version]` push), it's left alone.
 
 One-time setup: in the repository on GitHub, open **Settings → Pages** and set **Source** to
 **GitHub Actions**. The build uses relative asset paths, so it works at `https://<user>.github.io/<repo>/`
 without any configuration.
+
+### Versioning
+
+[`.github/workflows/version.yml`](.github/workflows/version.yml) runs on every push to `main` or `master`, so each merged
+pull request or direct commit bumps the version in `package.json` and `package-lock.json`, commits it as
+`chore: release vX.Y.Z` and tags it `vX.Y.Z`. It's a patch bump unless the commit message (or a pull
+request's merge commit or squash title) contains `[minor]` or `[major]`; `[skip version]` skips the bump.
+The release commit is marked `[skip ci]`, so it doesn't trigger another bump. A skipped bump still deploys.
+
+If the branch is protected, allow GitHub Actions to push to it (or give the workflow a token that can).

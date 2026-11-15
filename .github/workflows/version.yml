@@ -1,0 +1,86 @@
+name: Bump version
+
+# Every push to main/master (a merged pull request or a direct commit) bumps the
+# version in package.json and package-lock.json, commits it and tags it. When
+# this finishes, the "CI & Pages" workflow builds, tests and deploys the result
+# (see deploy.yml), so the published site always carries the new version.
+#
+# The bump is a patch release by default. Put [minor] or [major] in the commit
+# message (or the merge commit / squash title of a pull request) for a bigger
+# bump, or [skip version] to leave the version alone (the site still deploys).
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+# Run one bump at a time, in order, so two quick merges can't claim the same version.
+concurrency:
+  group: version-bump-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Never react to our own version commits, or to commits that opt out.
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.head_commit.message, '[skip version]')
+    env:
+      BRANCH: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The latest commit on the pushed branch, which may already include an earlier bump.
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Choose the kind of bump
+        id: kind
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          shopt -s nocasematch
+          if [[ "$MESSAGE" == *"[major]"* ]]; then
+            echo "bump=major" >> "$GITHUB_OUTPUT"
+          elif [[ "$MESSAGE" == *"[minor]"* ]]; then
+            echo "bump=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "bump=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump package.json and package-lock.json
+        id: bump
+        run: |
+          npm version "${{ steps.kind.outputs.bump }}" --no-git-tag-version
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Commit, tag and push
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: release v$VERSION [skip ci]"
+          git tag -a "v$VERSION" -m "v$VERSION"
+          # If something else landed on the branch meanwhile, rebase onto it and try again.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:$BRANCH" && git push origin "v$VERSION"; then
+              exit 0
+            fi
+            git pull --rebase origin "$BRANCH"
+            git tag -f -a "v$VERSION" -m "v$VERSION"
+          done
+          echo "Couldn't push the version bump after 3 attempts" >&2
+          exit 1
+
+      - name: Summary
+        run: echo "Released **v${{ steps.bump.outputs.version }}** (${{ steps.kind.outputs.bump }} bump)." >> "$GITHUB_STEP_SUMMARY"
