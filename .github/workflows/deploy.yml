@@ -117,15 +117,20 @@ jobs:
           name: dist
           path: dist
 
-      # deploy-pages only publishes an artifact from this run named "github-pages",
-      # so the build is packed into one here, right before it's deployed.
+      # deploy-pages publishes a Pages artifact from this run, so the build is packed
+      # into one here, right before it's deployed. Artifacts from earlier attempts stay
+      # on the run, so each attempt gets its own name; otherwise re-running the job
+      # leaves several with the same name and deploy-pages refuses to pick one.
       - name: Package for Pages
         uses: actions/upload-pages-artifact@v5
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: dist
 
       - id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
 
   release:
     name: Publish versioned release
