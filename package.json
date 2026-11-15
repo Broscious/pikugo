@@ -1,6 +1,6 @@
 {
   "name": "pikugo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Build wiggle-style animated WebP images from a handful of photos, entirely in the browser.",
   "type": "module",
